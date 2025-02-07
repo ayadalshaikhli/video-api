@@ -1,57 +1,59 @@
 // server.js
 import express from "express";
-import puppeteer from "puppeteer-extra";
-import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import cors from "cors";
+import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import dotenv from "dotenv";
-import http from "http";
-import cors from "cors";
+dotenv.config();
 
-// Import routes
 import TestRoute from "./routes/TestRoute.js";
 import videoRoutes from "./routes/videosRoute.js";
-
-puppeteer.use(StealthPlugin());
-dotenv.config();
+import syncRoute from "./routes/syncRoute.js";
+import generateRouter from "./routes/generateRoute.js";
 
 const app = express();
 const server = http.createServer(app);
 
-export const io = new SocketIOServer(server, {
-    cors: {
-        origin: "https://www.vairality.fun",
-        methods: ["GET", "POST"],
-        credentials: true
-    }
-});
+// Define your allowed origin for restricted routes
+const allowedOrigin = "https://www.vairality.fun";
 
-const PORT = process.env.PORT || 3001;
-const corsOptions = {
-    origin: "https://www.vairality.fun",
-    credentials: true
+const restrictOriginMiddleware = (req, res, next) => {
+    const origin = req.headers.origin;
+    if (!origin || origin !== allowedOrigin) {
+        return res.status(403).json({ error: "Access forbidden: Invalid origin." });
+    }
+    next();
 };
 
-app.use(express.json());
-app.use(cors(corsOptions));
 
-// Global error handler
+const openCors = cors({ origin: "*" });
+const restrictedCors = cors({ origin: allowedOrigin, credentials: true });
+
+app.use(express.json());
+
+
+app.use("/api/generate", openCors, generateRouter);
+app.use("/api/v1/test-route", restrictedCors, restrictOriginMiddleware, TestRoute);
+app.use("/videos", openCors, videoRoutes);
+app.use("/api/sync", restrictedCors, restrictOriginMiddleware, syncRoute);
+
 app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).send("Something broke!");
 });
 
-// Root endpoint
 app.get("/", (req, res) => {
     res.send("Hello from Express with Puppeteer");
 });
 
-// Use test route
-app.use("/api/v1/test-route", TestRoute);
+const io = new SocketIOServer(server, {
+    cors: {
+        origin: allowedOrigin,
+        methods: ["GET", "POST"],
+        credentials: true,
+    },
+});
 
-// Use video routes
-app.use("/videos", videoRoutes);
-
-// Socket.io connection
 io.on("connection", (socket) => {
     console.log("a user connected");
     socket.on("disconnect", () => {
@@ -59,8 +61,7 @@ io.on("connection", (socket) => {
     });
 });
 
-console.log("Starting server...");
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
-console.log("Server listen command issued.");
