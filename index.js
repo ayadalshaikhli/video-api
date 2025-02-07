@@ -15,19 +15,18 @@ const app = express();
 const server = http.createServer(app);
 
 // Define your allowed origin for restricted routes
-const allowedOrigin = "https://www.vairality.fun";
+const allowedOrigins = ["https://www.vairality.fun", "https://vairality.fun"];
 
 const restrictOriginMiddleware = (req, res, next) => {
     const origin = req.headers.origin;
-    if (!origin || origin !== allowedOrigin) {
+    if (!origin || !allowedOrigins.includes(origin)) {
         return res.status(403).json({ error: "Access forbidden: Invalid origin." });
     }
     next();
 };
 
-
 const openCors = cors({ origin: "*" });
-const restrictedCors = cors({ origin: allowedOrigin, credentials: true });
+const restrictedCors = cors({ origin: allowedOrigins, credentials: true });
 
 app.use(express.json());
 
