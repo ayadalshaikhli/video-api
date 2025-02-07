@@ -47,7 +47,7 @@ app.get("/", (req, res) => {
 
 const io = new SocketIOServer(server, {
     cors: {
-        origin: allowedOrigin,
+        origin: allowedOrigins,
         methods: ["GET", "POST"],
         credentials: true,
     },
