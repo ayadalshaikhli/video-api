@@ -6,6 +6,7 @@ import { getAuthToken } from "../utils/auth.js";
 import { sql } from "drizzle-orm";
 
 export const syncProjects = async () => {
+    console.log("syncProjects called");
     try {
         const token = await getAuthToken();
 
@@ -78,9 +79,10 @@ export const syncProjects = async () => {
                     updatedAt: new Date(), // or sql`EXCLUDED.updated_at` if you prefer
                 },
             });
-
+        console.log("Projects synced successfully");
         return { success: true, message: "Projects synced successfully" };
     } catch (error) {
+        console.error("Error syncing projects:", error.message);
         console.error("Error syncing projects:", error.message);
         throw error;
     }
