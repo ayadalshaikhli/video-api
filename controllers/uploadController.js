@@ -1,34 +1,38 @@
-// controllers/uploadController.js
 
 import mp3Duration from "mp3-duration";
 import fetch from "node-fetch";
-import { db } from "../lib/db/drizzle.js"; // Or your DB instance
+import { db } from "../lib/db/drizzle.js";
 import { videoProjects } from "../lib/db/schema.js";
 import { getUserCredits } from "../data/credit.js";
 import { eq } from "drizzle-orm";
+import { verifyToken } from "../lib/auth/session.js";
 
-/** Set your environment variable or Google Auth Token here */
 const google_auth_token = process.env.GOOGLE_AUTH_TOKEN;
 
-/**
- * uploadController replicates the original PreStep1 logic:
- * 1. Reads userId & projectName from form data.
- * 2. Validates MP3 file (< 50 MB, 15s ≤ duration < 10min).
- * 3. Checks user credits.
- * 4. Requests presigned URL (retry up to 100 times).
- * 5. Inserts record into 'videoProjects'.
- * 6. Returns { presignedUrl, awsId, filename, duration }.
- */
+
 export const uploadController = async (req, res) => {
     try {
         console.log("[uploadController] Start...");
-
-        // 1. Extract userId + projectName from form data
-        const userId = req.body.userId;
-        const projectName = req.body.projectName || "";
-        if (!userId) {
-            return res.status(400).json({ error: "Missing userId" });
+        const sessionCookie = req.cookies.session;
+        if (!sessionCookie) {
+            return res.status(401).json({ error: "Not authenticated (no session cookie)" });
         }
+
+        let payload;
+        try {
+            payload = await verifyToken(sessionCookie); // the same function from Next.js
+        } catch (err) {
+            console.error("[uploadController] JWT verify fail:", err);
+            return res.status(401).json({ error: "Invalid session token" });
+        }
+        // 1. Extract userId + projectName from form data
+        const userId = payload?.user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: "Invalid session payload" });
+        }
+
+        const projectName = req.body.projectName || "";
+
         console.log("[uploadController] userId =", userId, "projectName =", projectName);
 
         // 2. Extract the file from Multer
@@ -85,7 +89,7 @@ export const uploadController = async (req, res) => {
         console.log("[uploadController] Requesting presigned URL...");
         let attempts = 0;
         let presignedData;
-        while (attempts < 100) {
+        while (attempts < 200) {
             attempts++;
             console.log(`🔄 Attempt ${attempts} to get presigned URL...`);
             try {

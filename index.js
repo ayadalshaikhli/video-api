@@ -22,7 +22,7 @@ const server = http.createServer(app);
 // Define allowed origins for restricted routes
 const allowedOrigins = [
     "https://www.vairality.fun",
-    "https://vairality.fun"
+    "https://vairality.fun",
 ];
 
 // Middleware to restrict origins
