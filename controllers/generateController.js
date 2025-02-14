@@ -20,7 +20,7 @@ export const generateProject = async (req, res) => {
     console.log("req.body", req.body);
     try {
         const file = req.file;
-        const itemString = req.body.item; // expects a JSON string
+        const itemString = req.body.item;
         if (!file || !itemString) {
             return res.status(400).json({ error: "Missing file or item data" });
         }
