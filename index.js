@@ -23,7 +23,6 @@ const server = http.createServer(app);
 const allowedOrigins = [
     "https://www.vairality.fun",
     "https://vairality.fun",
-    "http://localhost:3000",
 ];
 
 // Middleware to restrict origins
