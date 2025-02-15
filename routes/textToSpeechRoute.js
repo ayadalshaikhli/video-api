@@ -3,8 +3,11 @@ import express from "express";
 import multer from "multer";
 import { generateSpeechController, uploadVoiceController } from "../controllers/textToSpeechController.js";
 
-// Use multer with memory storage.
-const upload = multer({ storage: multer.memoryStorage() });
+// Use multer with memory storage and set a file size limit of 5MB.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } // 5 MB in bytes
+});
 
 const router = express.Router();
 
