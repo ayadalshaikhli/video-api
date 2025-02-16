@@ -8,6 +8,13 @@
       "when": 1732592720431,
       "tag": "0000_sparkling_newton_destine",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1739658927567,
+      "tag": "0001_common_silverclaw",
+      "breakpoints": true
     }
   ]
 }

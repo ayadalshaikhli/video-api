@@ -23,6 +23,7 @@
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
     "buffer": "^6.0.3",
+    "consola": "^3.4.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -40,6 +41,7 @@
     "postgres": "^3.4.5",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "puppeteer-real-browser": "^1.4.0",
     "socket.io": "^4.7.5",
     "ws": "^8.18.0"
   }

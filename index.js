@@ -14,6 +14,8 @@ import syncRoute from "./routes/syncRoute.js";
 import generateRouter from "./routes/generateRoute.js";
 import uploadRoute from "./routes/uploadRoute.js";
 import textToSpeechRoute from "./routes/textToSpeechRoute.js";
+import speechToTextRoute from "./routes/speechToTextRoute.js";
+import urlToVideoRoute from "./routes/urlToVideoRoute.js";
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -25,6 +27,7 @@ const server = http.createServer(app);
 const allowedOrigins = [
     "https://www.vairality.fun",
     "https://vairality.fun",
+    'http://localhost:3000',
 ];
 
 const restrictOriginMiddleware = (req, res, next) => {
@@ -60,11 +63,13 @@ app.use((req, res, next) => {
 
 console.log("[Server] Registering routes...");
 app.use("/api/generate", openCors, generateRouter);
-app.use("/api/v1/test-route", restrictedCors, restrictOriginMiddleware, TestRoute);
+app.use("/api/test-route", openCors, TestRoute);
 app.use("/videos", openCors, videoRoutes);
 app.use("/api/sync", restrictedCors, restrictOriginMiddleware, syncRoute);
 app.use("/api/upload", restrictedCors, restrictOriginMiddleware, uploadRoute);
 app.use("/api/text-to-speech", restrictedCors, restrictOriginMiddleware, textToSpeechRoute);
+app.use("/api/speech-to-text", restrictedCors, restrictOriginMiddleware, speechToTextRoute);
+app.use("/api/url-to-video", restrictedCors, restrictOriginMiddleware, urlToVideoRoute);
 
 // New conversion route (you can decide if it should be open or restricted)
 app.use("/api/convert", openCors, convertRoute);
@@ -86,10 +91,9 @@ app.use((err, req, res, next) => {
 app.get("/", (req, res) => {
     console.log("[Route] GET /");
     console.log(`  Request from: ${req.ip}`);
-    res.send("Hello from Express with Puppeteer");
+    res.send("you shell not pass");
 });
 
-// Set up Socket.IO
 console.log("[Socket.IO] Setting up Socket.IO...");
 const io = new SocketIOServer(server, {
     cors: {
