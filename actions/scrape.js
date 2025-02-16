@@ -11,7 +11,6 @@ export const scrapeContent = async (url) => {
         const { connect } = await import("puppeteer-real-browser");
         const { browser, page } = await connect({
             headless: true,
-            executablePath: process.env.CHROME_PATH || '/usr/bin/chromium',
             turnstile: true,
             customConfig: {},
             connectOption: {

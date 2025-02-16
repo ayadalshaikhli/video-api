@@ -22,11 +22,22 @@ ENV PORT=9324
 # Install dependencies for xvfb and Chrome
 RUN apt-get update && apt-get install -y \
     chromium \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxi6 \
+    libxrandr2 \
+    libxshmfence1 \
     xvfb \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Chrome path environment variable (needed for puppeteer and scraping)
-ENV CHROME_PATH=/usr/bin/chromium
-
 # Run xvfb (for virtual display) and the Node.js server
-CMD ["xvfb-run", "node", "index.js"]
+CMD ["npm", "start"]
