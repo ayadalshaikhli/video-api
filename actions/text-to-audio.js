@@ -26,6 +26,21 @@ async function autoRetryFetch(url, options, retries = 10, delay = 1000) {
     }
 }
 
+async function autoRetryUpload(uploadFunction, buffer, filename, mimeType, retries = 10, delay = 1000) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const result = await uploadFunction(buffer, filename, mimeType);
+            return result;
+        } catch (error) {
+            if (attempt === retries) {
+                throw error;
+            }
+            await sleep(delay);
+            delay *= 2;
+        }
+    }
+}
+
 export async function generateSpeechAndSave({
     prompt,
     voiceId,
@@ -69,7 +84,12 @@ export async function generateSpeechAndSave({
 
         if (voice) {
             console.log("Voice found in DB. Fetching voice file...");
-            const voiceResponse = await fetch(voice.voiceUrl);
+            const voiceResponse = await autoRetryFetch(voice.voiceUrl, {
+                method: "GET",
+                headers: {
+                    "X-API-Key": process.env.ZYPHRA_API_KEY || "",
+                },
+            });
 
             if (voiceResponse.ok) {
                 const voiceArrayBuffer = await voiceResponse.arrayBuffer();
@@ -91,7 +111,6 @@ export async function generateSpeechAndSave({
         language_iso_code: languageIsoCode,
         ...(speakerAudioBase64 && { speaker_audio: speakerAudioBase64 }),
     };
-
 
     try {
         // Retry the API call if necessary
@@ -122,7 +141,7 @@ export async function generateSpeechAndSave({
 
         // Adjust your uploadAudioFile() so that it accepts a Buffer, filename, and mime type.
         console.log("Uploading audio file...");
-        const uploadAudioResult = await uploadAudioFile(audioBuffer, "audio.mp3", "audio/mp3");
+        const uploadAudioResult = await autoRetryUpload(uploadAudioFile, audioBuffer, "audio.mp3", "audio/mp3");
         console.log("Audio file uploaded successfully:", uploadAudioResult.publicUrl);
 
         // Save the generated audio URL to the database
@@ -158,7 +177,7 @@ export async function uploadVoice(file, userOverride) {
     const nameWithoutExtension = file.originalname.replace(/\.[^/.]+$/, "");
 
     // Adjust uploadVoiceFile() to accept a Buffer, filename, and mimetype.
-    const uploadResult = await uploadVoiceFile(file.buffer, file.originalname, file.mimetype);
+    const uploadResult = await autoRetryUpload(uploadVoiceFile, file.buffer, file.originalname, file.mimetype);
 
     const [newVoice] = await db
         .insert(voices)
@@ -189,5 +208,3 @@ export async function uploadConvertedVoice(convertedVoiceData, user) {
         .returning();
     return newVoice;
 }
-
-

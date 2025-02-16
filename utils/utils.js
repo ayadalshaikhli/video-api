@@ -1,7 +1,7 @@
 import { consola } from 'consola';
 
 
-export const retryFunction = async (func, retries = 3, delay = 1000) => {
+export const retryFunction = async (func, retries = 100, delay = 1000) => {
     let attempt = 0;
 
     while (attempt < retries) {

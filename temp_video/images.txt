@@ -1,0 +1,7 @@
+file 'C:\Users\ayada\Desktop\vidoe-api\actions\generated_images\d79a48ab2cdea3d69120c63ed25e97.jpg'
+duration 5
+file 'C:\Users\ayada\Desktop\vidoe-api\actions\generated_images\ed61526c5f8d14912239c28bb25031.jpg'
+duration 5
+file 'C:\Users\ayada\Desktop\vidoe-api\actions\generated_images\72f97cd6beffe4b3299b33ae07024b.jpg'
+duration 5
+file 'C:\Users\ayada\Desktop\vidoe-api\actions\generated_images\72f97cd6beffe4b3299b33ae07024b.jpg'

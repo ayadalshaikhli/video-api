@@ -9,6 +9,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
+const escapeText = (text) => {
+  return text
+    .replace(/[\\']/g, '') // Remove quotes and backslashes
+    .replace(/[^a-zA-Z0-9\s.,!?-]/g, '') // Only keep basic characters
+    .replace(/\s+/g, ' ') // Normalize spaces
+    .trim();
+};
+
 export const UrlToVideoController = async (req, res) => {
   try {
     const user = await getUserFromSession(req);
@@ -41,23 +49,11 @@ export const UrlToVideoController = async (req, res) => {
 
     const summarizedContentChunks = summarizedContent.split(". ");
     let imageResults = [];
-    const imageDuration = 5; // Duration each image should show (in seconds)
-    let currentTime = 0; // Track the current time for the chunks
-    let overlayTextContent = ''; // Store the content for text overlay
+    const imageDuration = 5;
 
-    for (const [index, chunk] of summarizedContentChunks.entries()) {
+    for (const chunk of summarizedContentChunks) {
       const imageResult = await generateImageFromPrompt(chunk);
       imageResults.push(imageResult.image);
-
-      // Calculate the start and end times for the chunk (based on image duration)
-      const startTime = currentTime;
-      const endTime = currentTime + imageDuration;
-
-      // Update the current time for the next chunk
-      currentTime = endTime;
-
-      // Prepare the overlay text (this is what will appear over the video)
-      overlayTextContent += `\n#${index + 1} - Text: "${chunk}" Duration: [${startTime}s to ${endTime}s]\n`;
     }
 
     const __filename = fileURLToPath(import.meta.url);
@@ -71,7 +67,7 @@ export const UrlToVideoController = async (req, res) => {
     const audioPath = path.join(tempDir, 'audio.mp3');
     fs.writeFileSync(audioPath, await fetchAudio(speechResult.audioUrl));
 
-    // Create a temporary text file listing all images (for FFmpeg concat demuxer)
+    // Create image list file
     const imageListPath = path.join(tempDir, 'images.txt');
     let imageListContent = '';
     for (const imagePath of imageResults) {
@@ -83,57 +79,67 @@ export const UrlToVideoController = async (req, res) => {
 
     const videoPath = path.join(tempDir, 'output_video.mp4');
 
-    // Create new FFmpeg command to generate video with text overlay
     return new Promise((resolve, reject) => {
-      const ffmpegCommand = ffmpeg();
+      // Split the text into smaller chunks that FFmpeg can handle
+      const maxCharsPerLine = 100;
+      const textChunks = [];
+      let currentChunk = '';
 
-      // Add the images (using concat demuxer)
-      ffmpegCommand.input(imageListPath).inputOptions(['-f concat', '-safe 0']);
+      summarizedContent.split(' ').forEach(word => {
+        if ((currentChunk + ' ' + word).length <= maxCharsPerLine) {
+          currentChunk += (currentChunk ? ' ' : '') + word;
+        } else {
+          if (currentChunk) textChunks.push(currentChunk);
+          currentChunk = word;
+        }
+      });
+      if (currentChunk) textChunks.push(currentChunk);
 
-      // Add audio
-      ffmpegCommand.input(audioPath);
-
-      // Use drawtext filter to add dynamic text overlay
-      summarizedContentChunks.forEach((chunk, index) => {
-        const startTime = index * imageDuration;
-        const endTime = (index + 1) * imageDuration;
-
-        // Overlay text on video (adjust position, font, size, etc.)
-        ffmpegCommand.outputOptions([
-          `-vf "drawtext=text='${chunk.replace(/'/g, "\\'")}':enable='between(t,${startTime},${endTime})':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2"`,
-        ]);
+      // Create text overlay for each chunk
+      const textOverlays = textChunks.map((chunk, index) => {
+        const yPosition = 50 + (index * 30); // Stack text vertically
+        return `drawtext=text='${escapeText(chunk)}':x=(w-text_w)/2:y=${yPosition}:fontsize=24:fontcolor=white:box=1:boxcolor=black@0.5`;
       });
 
-      // Final output options for video encoding
-      ffmpegCommand.outputOptions([
-        '-c:v libx264',
-        '-pix_fmt yuv420p',
-        '-r 30',
-        '-shortest', // End when the shorter input ends (audio or images)
-      ]);
+      // Add the final "Thank you" message
+      textOverlays.push(`drawtext=text='Thank you for watching!':x=(w-text_w)/2:y=(h-th)/2:fontsize=30:fontcolor=white:box=1:boxcolor=black@0.5:enable='gte(t,${imageDuration-1})'`);
 
-      ffmpegCommand.on('end', () => {
-        console.log('Video created successfully!');
-        // Clean up temporary files
-        fs.unlinkSync(imageListPath);
-        fs.unlinkSync(audioPath);
+      ffmpeg()
+        .input(imageListPath)
+        .inputOptions(['-f concat', '-safe 0'])
+        .input(audioPath)
+        .outputOptions([
+          `-vf "${textOverlays.join(',')}"`,
+          '-c:v libx264',
+          '-pix_fmt yuv420p',
+          '-r 30',
+          '-shortest'
+        ])
+        .on('start', (command) => {
+          console.log('FFmpeg command:', command);
+        })
+        .on('end', () => {
+          console.log('Video created successfully!');
+          // Clean up temporary files
+          fs.unlinkSync(imageListPath);
+          fs.unlinkSync(audioPath);
 
-        resolve(res.json({
-          success: true,
-          message: 'Content successfully processed and video created!',
-          data: {
-            videoUrl: `/videos/output_video.mp4`,
-          },
-        }));
-      })
-      .on('error', (err) => {
-        console.error('Error in creating video:', err);
-        reject(res.status(500).json({
-          success: false,
-          message: `Error in creating video: ${err.message}`,
-        }));
-      })
-      .save(videoPath);
+          resolve(res.json({
+            success: true,
+            message: 'Content successfully processed and video created!',
+            data: {
+              videoUrl: `/videos/output_video.mp4`,
+            },
+          }));
+        })
+        .on('error', (err) => {
+          console.error('Error in creating video:', err);
+          reject(res.status(500).json({
+            success: false,
+            message: `Error in creating video: ${err.message}`,
+          }));
+        })
+        .save(videoPath);
     });
 
   } catch (error) {
