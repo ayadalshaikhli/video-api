@@ -14,7 +14,6 @@ async function fetchImageWithRetry(payload, maxRetries = 3, delayMs = 1000, axio
     const API_KEY = process.env.CLOUDFLARE_API_KEY;
     const API_URL = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`;
 
-    console.log("Starting fetchImageWithRetry with payload:", payload);
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             console.log(`Attempt ${attempt} to fetch image...`);
@@ -25,7 +24,6 @@ async function fetchImageWithRetry(payload, maxRetries = 3, delayMs = 1000, axio
                 },
                 ...axiosConfig,
             });
-            console.log("Image response received:", response.data);
             return response;
         } catch (error) {
             console.error(`Attempt ${attempt} failed:`, error.message);
