@@ -8,7 +8,7 @@ export const whisperAudio = async (audioUrl, saveToFile = false) => {
         // Your Cloudflare API credentials
         const cfAccountId = process.env.CLOUDFLARE_ACCOUNT_ID;
         const cfApiToken = process.env.CLOUDFLARE_API_KEY;
-        const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/ai/run/@cf/openai/whisper`;
+        const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/ai/run/@cf/openai/whisper-tiny-en`;
 
         // Check for valid Cloudflare API credentials
         if (!cfAccountId || !cfApiToken) {
@@ -32,7 +32,7 @@ export const whisperAudio = async (audioUrl, saveToFile = false) => {
                     'Content-Type': 'application/octet-stream',
                 }
             });
-            
+
             consola.info("📡 Cloudflare Whisper API response status:", response.status);
             return response;
         });
@@ -45,7 +45,7 @@ export const whisperAudio = async (audioUrl, saveToFile = false) => {
 
         // Extract the full response data
         const responseData = transcriptionResponse.data;
-        
+
         // Create a complete transcription result object
         const transcriptionResult = {
             text: responseData.result.text || null,
@@ -56,9 +56,9 @@ export const whisperAudio = async (audioUrl, saveToFile = false) => {
             errors: responseData.errors,
             messages: responseData.messages
         };
-
+        consola.log(transcriptionResult)
         consola.info("✅ Transcription completed successfully.");
-        
+
         // If saveToFile is true, save the complete transcription data
         if (saveToFile) {
             const fileData = {
@@ -67,8 +67,8 @@ export const whisperAudio = async (audioUrl, saveToFile = false) => {
             };
 
             fs.writeFileSync(
-                './transcriptionResult.json', 
-                JSON.stringify(fileData, null, 2), 
+                './transcriptionResult.json',
+                JSON.stringify(fileData, null, 2),
                 'utf-8'
             );
             consola.info("✅ Transcription saved to 'transcriptionResult.json'.");

@@ -1,4 +1,3 @@
-
 import mp3Duration from "mp3-duration";
 import fetch from "node-fetch";
 import { db } from "../lib/db/drizzle.js";
@@ -8,7 +7,6 @@ import { eq } from "drizzle-orm";
 import { verifyToken } from "../lib/auth/session.js";
 
 const google_auth_token = process.env.GOOGLE_AUTH_TOKEN;
-
 
 export const uploadController = async (req, res) => {
     try {
@@ -32,7 +30,6 @@ export const uploadController = async (req, res) => {
         }
 
         const projectName = req.body.projectName || "";
-
         console.log("[uploadController] userId =", userId, "projectName =", projectName);
 
         // 2. Extract the file from Multer
@@ -122,6 +119,17 @@ export const uploadController = async (req, res) => {
         }
         const presignedUrl = presignedData.result.presignedUrl;
         console.log("✅ Presigned URL:", presignedUrl);
+
+        // 5b. Upload the file using the presigned URL
+        console.log("[uploadController] Uploading file to presigned URL...");
+        await fetch(presignedUrl, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "audio/mpeg",
+            },
+            body: file.buffer,
+        });
+        console.log("[uploadController] File uploaded successfully to S3.");
 
         // Extract awsId + filename from the URL
         const urlObject = new URL(presignedUrl);

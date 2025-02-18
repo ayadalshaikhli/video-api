@@ -1,7 +1,6 @@
-file 'C:\Users\ayada\Desktop\vidoe-api\actions\generated_images\d79a48ab2cdea3d69120c63ed25e97.jpg'
+file 'C:/Users/ayada/Desktop/vidoe-api/temp_video/image_1qkj76dpkrz.jpg'
 duration 5
-file 'C:\Users\ayada\Desktop\vidoe-api\actions\generated_images\ed61526c5f8d14912239c28bb25031.jpg'
+file 'C:/Users/ayada/Desktop/vidoe-api/temp_video/image_g65mg1dh5a.jpg'
 duration 5
-file 'C:\Users\ayada\Desktop\vidoe-api\actions\generated_images\72f97cd6beffe4b3299b33ae07024b.jpg'
+file 'C:/Users/ayada/Desktop/vidoe-api/temp_video/image_of6hac9sij.jpg'
 duration 5
-file 'C:\Users\ayada\Desktop\vidoe-api\actions\generated_images\72f97cd6beffe4b3299b33ae07024b.jpg'
