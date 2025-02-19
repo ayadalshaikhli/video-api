@@ -5,7 +5,7 @@ import { retryFunction } from '../utils/utils.js';  // Import retry function fro
 export const summarizeText = async (text) => {
     try {
         // Log the incoming content
-        consola.info("Text received for summarization:", text.slice(100, 200)); // Log the first 100 chars
+        consola.info("Text received for summarization:", text.slice(0, 100)); // Log the first 100 chars
 
         if (!text || text.trim().length === 0) {
             consola.error("❌ The text provided is empty or invalid.");
@@ -22,7 +22,7 @@ export const summarizeText = async (text) => {
         }
 
         // Log the input text to be sent to the model (limited to the first 100 characters for debugging)
-        consola.info(`🚀 Sending request to Cloudflare with the following text: ${text.slice(100, 200)}...`);
+        consola.info(`🚀 Sending request to Cloudflare with the following text: ${text.slice(0, 100)}...`);
 
         const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-2-7b-chat-fp16`;
 
