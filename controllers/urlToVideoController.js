@@ -1,6 +1,3 @@
-/***************************************************
- * UrlToVideoController.js
- ****************************************************/
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
 import { scrapeContent } from "../actions/scrape.js";
@@ -9,6 +6,7 @@ import { generateSpeechAndSave } from "../actions/text-to-audio.js";
 import { getUserFromSession } from "../utils/session.js";
 import { generateImageFromPrompt } from "../actions/image-generation.js";
 import { whisperAudio } from "../actions/whisper.js";
+import { uploadVideoFile } from "../actions/cloudflare.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -18,12 +16,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Set ffmpeg path from the npm package ffmpeg-static
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
-// --------------------------------------------------
-// 1) FETCH AUDIO HELPER
-// --------------------------------------------------
 async function fetchAudio(audioUrl) {
   try {
     const response = await fetch(audioUrl);
@@ -38,9 +32,6 @@ async function fetchAudio(audioUrl) {
   }
 }
 
-// --------------------------------------------------
-// 2) HELPER TO CLEAN BASE64 STRING
-// --------------------------------------------------
 function cleanBase64(base64String) {
   if (base64String.startsWith("data:")) {
     return base64String.split(",")[1];
@@ -48,9 +39,6 @@ function cleanBase64(base64String) {
   return base64String;
 }
 
-// --------------------------------------------------
-// 3) SRT HELPER FUNCTIONS (OLD, word-by-word)
-// --------------------------------------------------
 function secondsToSrt(seconds) {
   const date = new Date(seconds * 1000);
   const hours = date.getUTCHours().toString().padStart(2, "0");
@@ -63,44 +51,29 @@ function secondsToSrt(seconds) {
 function transcriptionToWordBySrtEntry(words) {
   let srt = "";
   let index = 1;
-
   words.forEach((word, i) => {
     const startTime = Math.max(0, word.start - 0.05);
     const endTime = word.end + 0.05;
-
     const prevWords = words.slice(Math.max(0, i - 2), i).map((w) => w.word);
     const currentWord = word.word;
     const nextWords = words.slice(i + 1, i + 3).map((w) => w.word);
-
     const displayText = [...prevWords, `<b>${currentWord}</b>`, ...nextWords]
       .join(" ")
       .trim();
-
     srt += `${index}\n`;
     srt += `${secondsToSrt(startTime)} --> ${secondsToSrt(endTime)}\n`;
     srt += `${displayText}\n\n`;
-
     index++;
   });
-
   return srt;
 }
 
-// --------------------------------------------------
-// 4) NEW HELPER: CONVERT VTT TO SRT
-// --------------------------------------------------
-/**
- * Converts VTT content into SRT format.
- * The VTT from Cloudflare Whisper already groups spoken phrases.
- */
 function convertVttToSrt(vtt) {
-  // Split by double-newlines to get blocks and ignore header lines (like "WEBVTT")
   const blocks = vtt.split(/\r?\n\r?\n/).filter(
     (block) => block.trim() && !block.startsWith("WEBVTT")
   );
   let srt = "";
   let index = 1;
-
   blocks.forEach((block) => {
     const lines = block.split(/\r?\n/);
     if (lines.length >= 2) {
@@ -118,9 +91,6 @@ function convertVttToSrt(vtt) {
   return srt;
 }
 
-/**
- * Converts a timestamp (in seconds as string) to SRT format "HH:MM:SS,mmm"
- */
 function convertTimestamp(timeString) {
   const seconds = parseFloat(timeString);
   const date = new Date(seconds * 1000);
@@ -131,25 +101,34 @@ function convertTimestamp(timeString) {
   return `${hh}:${mm}:${ss},${ms}`;
 }
 
-// --------------------------------------------------
-// 5) HELPER TO GET AUDIO DURATION
-// --------------------------------------------------
 async function getAudioDuration(audioPath) {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(audioPath, (err, metadata) => {
       if (err) {
         reject(err);
       } else {
-        resolve(metadata.format.duration);
+        resolve(parseFloat(metadata.format.duration));
       }
     });
   });
 }
 
-// --------------------------------------------------
-// 6) MAIN CONTROLLER
-// --------------------------------------------------
 export const UrlToVideoController = async (req, res) => {
+  // Get the base directory for temporary files
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const baseTempDir = path.join(__dirname, "../temp_video");
+
+  // Create a unique temporary directory for this job
+  const jobTempDir = path.join(
+    baseTempDir,
+    `job-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`
+  );
+  if (!fs.existsSync(jobTempDir)) {
+    fs.mkdirSync(jobTempDir, { recursive: true });
+    console.log("Job temporary directory created:", jobTempDir);
+  }
+
   try {
     const user = await getUserFromSession(req);
     const { url } = req.body;
@@ -158,8 +137,6 @@ export const UrlToVideoController = async (req, res) => {
         .status(400)
         .json({ success: false, message: "URL is required." });
     }
-
-    // (A) SCRAPE & SUMMARIZE
     const content = await scrapeContent(url);
     const summarizedContent = await summarizeText(content);
     if (!summarizedContent || summarizedContent === "No summary generated") {
@@ -169,8 +146,6 @@ export const UrlToVideoController = async (req, res) => {
         message: "Failed to generate a valid summary.",
       });
     }
-
-    // (B) GENERATE TTS AUDIO
     const voiceId = 9;
     const languageIsoCode = "en-us";
     const speechResult = await generateSpeechAndSave({
@@ -180,8 +155,6 @@ export const UrlToVideoController = async (req, res) => {
       userOverride: user,
     });
     const audioUrl = speechResult.audioUrl;
-
-    // (C) WHISPER TRANSCRIPTION
     const transcriptionResult = await whisperAudio(audioUrl);
     if (
       !transcriptionResult.success ||
@@ -193,89 +166,83 @@ export const UrlToVideoController = async (req, res) => {
         .json({ success: false, message: "Failed to transcribe audio." });
     }
     console.log("Transcribed text:", transcriptionResult.text);
-
-    // (D) CREATE SRT FILE FROM VTT (instead of word-by-word)
     const srtContent = convertVttToSrt(transcriptionResult.vtt);
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const tempDir = path.join(__dirname, "../temp_video");
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-      console.log("Temporary directory created:", tempDir);
-    }
-    const subtitlePath = path.join(tempDir, "subtitles.srt");
+    const subtitlePath = path.join(jobTempDir, "subtitles.srt");
     fs.writeFileSync(subtitlePath, srtContent);
     console.log("SRT file created at:", subtitlePath);
 
-    // (E) GENERATE IMAGES (using pre-saved images from generated_images folder)
-    const summarizedContentChunks = summarizedContent.split(". ");
+    // Split the summarized content into chunks.
+    const summarizedContentChunks = summarizedContent
+      .split(". ")
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 0);
+    console.log(
+      "Summarized content chunks:",
+      summarizedContentChunks,
+      "Total chunks:",
+      summarizedContentChunks.length
+    );
+
     let imagePaths = [];
     for (const chunk of summarizedContentChunks) {
       const imageResult = await generateImageFromPrompt(chunk);
       console.log(`Image generated at: ${imageResult.image}`);
       imagePaths.push(imageResult.image);
     }
+    console.log("Total images generated:", imagePaths.length);
+    console.log("Image paths array:", imagePaths);
 
-    // (F) FETCH AND SAVE AUDIO LOCALLY
+    // Save audio file to disk.
     const audioBuffer = await fetchAudio(audioUrl);
-    const audioPath = path.join(tempDir, "speech_audio.mp3");
+    const audioPath = path.join(jobTempDir, "speech_audio.mp3");
     fs.writeFileSync(audioPath, audioBuffer);
     console.log("Audio saved to:", audioPath);
-
-    // (G) GET AUDIO DURATION
     const audioDuration = await getAudioDuration(audioPath);
     console.log("Audio duration:", audioDuration, "seconds");
 
-    // (H) CREATE images.txt FILE FOR CONCAT, matching audio duration
-    const imageListPath = path.join(tempDir, "images.txt");
+    // Compute duration per image.
     const numberOfImages = imagePaths.length;
-    // For the concat demuxer, the last image does not contribute to duration.
-    // So if there is more than one image, compute duration per image as:
-    //   audioDuration / (numberOfImages - 1)
-    // Otherwise, if only one image, use full duration.
-    const durationPerImage =
-      numberOfImages > 1 ? audioDuration / (numberOfImages - 1) : audioDuration;
+    console.log("Total images generated:", numberOfImages);
+    const durationPerImage = audioDuration / numberOfImages;
+    console.log("Duration per image:", durationPerImage, "seconds");
+
+    // Create the FFmpeg images list file.
+    const imageListPath = path.join(jobTempDir, "images.txt");
     let imageListContent = "";
-    imagePaths.forEach((imgPath, index) => {
-      const formattedPath = imgPath.replace(/\\/g, "/");
-      imageListContent += `file '${formattedPath}'\n`;
-      // Add duration only for non-last images
-      if (index !== imagePaths.length - 1) {
-        imageListContent += `duration ${durationPerImage}\n`;
-      }
-    });
-    // Repeat the last image as required by the concat demuxer
     if (numberOfImages > 0) {
+      imagePaths.forEach((imgPath) => {
+        const formattedPath = imgPath.replace(/\\/g, "/");
+        imageListContent += `file '${formattedPath}'\n`;
+        imageListContent += `duration ${durationPerImage}\n`;
+      });
       const lastImagePath = imagePaths[numberOfImages - 1].replace(/\\/g, "/");
       imageListContent += `file '${lastImagePath}'\n`;
     }
     fs.writeFileSync(imageListPath, imageListContent);
     console.log("Created images list file at:", imageListPath);
+    console.log("Images list content:\n", imageListContent);
 
-    // (I) CREATE VIDEO VIA TWO PASSES
-
-    const slideshowPath = path.join(tempDir, "slideshow.mp4");
-    const finalVideoPath = path.join(tempDir, "output_video.mp4");
-
-    // ----- PASS 1: Create slideshow from images -----
+    // Create slideshow video from images.
+    const slideshowPath = path.join(jobTempDir, "slideshow.mp4");
+    const finalVideoPath = path.join(jobTempDir, "output_video.mp4");
     let slideshowStderr = "";
     await new Promise((resolve, reject) => {
       ffmpeg()
         .input(imageListPath)
         .inputFormat("concat")
         .inputOptions(["-safe", "0", "-vsync", "vfr"])
-        // Let the concat demuxer use durations from the file list
-        .outputOptions([
-          "-pix_fmt", "yuv420p",
-          "-loglevel", "verbose",
-        ])
+        .outputOptions(["-pix_fmt", "yuv420p", "-loglevel", "verbose"])
         .on("stderr", (line) => {
           console.log("FFmpeg (slideshow) stderr:", line);
           slideshowStderr += line + "\n";
         })
         .on("error", (err) => {
           console.error("Error in slideshow pass:", err);
-          reject(new Error(`Slideshow error:\n${slideshowStderr}\n${err.message}`));
+          reject(
+            new Error(
+              `Slideshow error:\n${slideshowStderr}\n${err.message}`
+            )
+          );
         })
         .on("end", () => {
           console.log("Slideshow video created at:", slideshowPath);
@@ -284,7 +251,6 @@ export const UrlToVideoController = async (req, res) => {
         .save(slideshowPath);
     });
 
-    // ----- PASS 2: Add audio + burn in subtitles -----
     const fontsDir = path.resolve(__dirname, "../fonts");
     const formattedSubtitlePath = subtitlePath
       .replace(/\\/g, "/")
@@ -292,11 +258,8 @@ export const UrlToVideoController = async (req, res) => {
     const formattedFontsDir = fontsDir
       .replace(/\\/g, "/")
       .replace(/^([A-Z]):/, "$1\\:");
-    const subtitlesFilter = `subtitles='${formattedSubtitlePath}:fontsdir=${formattedFontsDir}:force_style=Fontname=Roboto,FontSize=30,MarginV=70,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Bold=1'`;
-    
-    // Chain an fps filter (forcing 30fps) with the subtitles filter
+    const subtitlesFilter = `subtitles='${formattedSubtitlePath}:fontsdir=${formattedFontsDir}:force_style=FontName=Roboto,FontSize=30,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,BackColour=&HAA000000&,BorderStyle=3,Outline=1,Shadow=1'`;
     const vfFilter = `fps=30,${subtitlesFilter}`;
-    
     let mergeStderr = "";
     await new Promise((resolve, reject) => {
       ffmpeg()
@@ -305,11 +268,13 @@ export const UrlToVideoController = async (req, res) => {
         .audioCodec("aac")
         .videoCodec("libx264")
         .outputOptions([
-          "-vf", vfFilter,
-          // Force the final duration to match the audio duration
-          "-t", audioDuration.toString(),
+          "-vf",
+          vfFilter,
+          "-t",
+          audioDuration.toString(),
           "-y",
-          "-loglevel", "verbose"
+          "-loglevel",
+          "verbose",
         ])
         .on("stderr", (line) => {
           console.log("FFmpeg (merge) stderr:", line);
@@ -317,7 +282,9 @@ export const UrlToVideoController = async (req, res) => {
         })
         .on("error", (err) => {
           console.error("Error in merge pass:", err);
-          reject(new Error(`Merge error:\n${mergeStderr}\n${err.message}`));
+          reject(
+            new Error(`Merge error:\n${mergeStderr}\n${err.message}`)
+          );
         })
         .on("end", () => {
           console.log("Final video created at:", finalVideoPath);
@@ -326,11 +293,23 @@ export const UrlToVideoController = async (req, res) => {
         .save(finalVideoPath);
     });
 
+    const videoFile = {
+      buffer: fs.readFileSync(finalVideoPath),
+      originalname: "output_video.mp4",
+      mimetype: "video/mp4",
+    };
+    const uploadResult = await uploadVideoFile(videoFile);
+    console.log("Video uploaded. Public URL:", uploadResult.publicUrl);
+
+    // Remove this job's temporary files after successful upload.
+    fs.rmSync(jobTempDir, { recursive: true, force: true });
+    console.log("Job temporary files removed.");
+
     return res.json({
       success: true,
       message:
-        "Video created successfully with synced audio and continuously updated captions!",
-      data: { videoUrl: finalVideoPath },
+        "Video created, uploaded, and temporary files removed successfully!",
+      data: { videoUrl: uploadResult.publicUrl },
     });
   } catch (error) {
     console.error("Error in processing:", error);

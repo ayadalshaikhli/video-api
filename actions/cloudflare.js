@@ -147,3 +147,29 @@ export async function uploadImageFile(file) {
   const publicUrl = `${process.env.CLOUDFLARE_R2_DEV_ENDPOINT}/${key}`;
   return { key, publicUrl };
 }
+
+export async function uploadVideoFile(file) {
+  if (!file) {
+    throw new Error("No file provided");
+  }
+
+  const fileBuffer = getFileBuffer(file);
+  const originalName = getOriginalName(file) || "video.mp4";
+  const extMatch = originalName.match(/\.[0-9a-z]+$/i);
+  const extension = extMatch ? extMatch[0] : ".mp4";
+  const randomFileName = crypto.randomBytes(16).toString("hex");
+  const key = `video/${randomFileName}${extension}`;
+  const contentType = getContentType(file);
+
+  const command = new PutObjectCommand({
+    Bucket: process.env.CLOUDFLARE_R2_BUCKET,
+    Key: key,
+    Body: fileBuffer,
+    ContentType: contentType,
+  });
+
+  await r2Client.send(command);
+
+  const publicUrl = `${process.env.CLOUDFLARE_R2_DEV_ENDPOINT}/${key}`;
+  return { key, publicUrl };
+}

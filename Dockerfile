@@ -10,16 +10,19 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
+# Install FFmpeg (which includes ffprobe)
+RUN apt-get update && apt-get install -y ffmpeg
+
 # Copy all the application files
 COPY . .
 
-# Expose port 9469 (as requested)
+# Expose port 9324 (as requested)
 EXPOSE 9324
 
 # Set environment variables (you can modify this if necessary)
 ENV PORT=9324
 
-# Install dependencies for xvfb and Chrome
+# Install dependencies for xvfb and Chrome (if needed)
 RUN apt-get update && apt-get install -y \
     chromium \
     libatk-bridge2.0-0 \
