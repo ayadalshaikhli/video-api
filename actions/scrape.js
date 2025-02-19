@@ -25,8 +25,8 @@ export const scrapeContent = async (url) => {
         console.log("Page loaded successfully");
         // Extract content from the page body (you can change this as needed)
         const content = await page.evaluate(() => {
-            const mainElement = document.querySelector('main');
-            return mainElement ? mainElement.innerText.trim() : '';
+            const bodyContent = document.body.innerText.trim();  // You can change this logic
+            return bodyContent;  // Return plain text, or modify to get specific elements like articles
         });
         console.log(content);
         console.log("Content extracted successfully");
