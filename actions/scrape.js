@@ -21,11 +21,11 @@ export const scrapeContent = async (url) => {
         await page.goto(url, { waitUntil: 'domcontentloaded' });
 
         // Wait for the page to load and be ready for scraping
-        await page.waitForSelector('body', { timeout: 50000 });
+        await page.waitForSelector('body', { timeout: 100000 });
         console.log("Page loaded successfully");
         // Extract content from the page body (you can change this as needed)
         const content = await page.evaluate(() => {
-            const bodyContent = document.body.innerText.trim();  // You can change this logic
+            const bodyContent = document.querySelector('main').innerText;
             return bodyContent;  // Return plain text, or modify to get specific elements like articles
         });
         console.log(content);
