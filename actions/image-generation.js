@@ -9,29 +9,47 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Retry helper for the image-generation request
-async function fetchImageWithRetry(payload, maxRetries = 3, delayMs = 1000, axiosConfig = {}) {
-  const API_KEY = process.env.CLOUDFLARE_API_KEY;
-  const API_URL = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`;
+// Combine the main prompt and video style prompt.
+// If videoStylePrompt is an array, join its elements.
+// If it's a string, concatenate it.
+// If it's an object, join its values.
+function combinePrompts(mainPrompt, videoStylePrompt) {
+  if (!videoStylePrompt) return mainPrompt;
+  if (Array.isArray(videoStylePrompt)) {
+    return videoStylePrompt.join(" ") + " " + mainPrompt;
+  } else if (typeof videoStylePrompt === "string") {
+    return mainPrompt + " " + videoStylePrompt;
+  } else if (typeof videoStylePrompt === "object") {
+    return Object.values(videoStylePrompt).join(" ") + " " + mainPrompt;
+  }
+  return mainPrompt;
+}
 
+// Select the API endpoint based on the selected model.
+function getEndpoint(model) {
+  if (model === "stable-diffusion-xl-base-1.0") {
+    return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/stabilityai/stable-diffusion-xl-base-1.0`;
+  }
+  return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`;
+}
+
+// Retry helper WITHOUT NSFW handling.
+async function fetchImageWithRetry(payload, model = "flux-1-schnell", maxRetries = 3, delayMs = 1000, axiosConfig = {}) {
+  const API_KEY = process.env.CLOUDFLARE_API_KEY;
+  const API_URL = getEndpoint(model);
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`Attempt ${attempt} to fetch image...`);
+      console.info(`Attempt ${attempt} using ${model}.`);
       const response = await axios.post(API_URL, payload, {
         headers: {
           "Authorization": `Bearer ${API_KEY}`,
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
         ...axiosConfig,
       });
       return response;
     } catch (error) {
-      console.error(`Attempt ${attempt} failed:`, error.message);
-      if (error.response) {
-        console.error("Full error response:", error.response.data);
-        console.error("Error status:", error.response.status);
-        console.error("Error headers:", error.response.headers);
-      }
+      console.error(`Attempt ${attempt} failed: ${error.message}`);
       if (attempt === maxRetries) {
         throw error;
       }
@@ -40,77 +58,67 @@ async function fetchImageWithRetry(payload, maxRetries = 3, delayMs = 1000, axio
   }
 }
 
-// Generate image based on summarized chunks
-export async function generateImageFromPrompt(prompt) {
+// Main function: generateImageFromPrompt.
+// Accepts a prompt (string or object), an optional videoStylePrompt,
+// an optional model (default "flux-1-schnell"), and optional sdxlParams.
+export async function generateImageFromPrompt(prompt, videoStylePrompt = null, model = "flux-1-schnell", sdxlParams = {}) {
   try {
-    // Ensure we have a valid prompt string.
-    if (typeof prompt !== "string") {
-      if (prompt && prompt.text) {
-        prompt = prompt.text; // If it's an object with 'text' property, use it
-      } else {
-        throw new Error("Prompt is not a valid string or an object with a 'text' property.");
-      }
-    }
-
-    if (!prompt || prompt === "No valid prompt available") {
-      throw new Error("Failed to provide a valid prompt.");
-    }
-
-    console.log("Prompt received: Proceeding with image generation.");
-
-    // Construct the payload with the prompt as a plain string
-    const payload = {
-      prompt: prompt // Use the chunk directly as prompt
-    };
-
-    // Retry the API call for image generation
-    const response = await fetchImageWithRetry(payload, 3, 1000);
-
-    let base64Image, contentType;
-    if (response.data && response.data.result && response.data.result.image) {
-      base64Image = response.data.result.image;
-      contentType = "image/jpeg";
+    let mainPrompt;
+    if (typeof prompt === "string") {
+      mainPrompt = prompt;
+    } else if (typeof prompt === "object") {
+      mainPrompt = prompt.description ? prompt.description : Object.values(prompt).join(" ");
     } else {
-      console.error("No image data received:", response.data);
-      throw new Error("No image data received: " + JSON.stringify(response.data));
+      throw new Error("Main prompt is not a valid string or object.");
     }
 
-    console.log("Base64 image generated successfully.");
-    const imageBuffer = Buffer.from(base64Image, "base64");
+    let finalPrompt = combinePrompts(mainPrompt, videoStylePrompt);
+    if (model === "stable-diffusion-xl-base-1.0") {
+      finalPrompt = finalPrompt.replace(/AI_PROMPT_\d+/gi, "").trim();
+    }
+    console.info("Final prompt set.");
 
-    // Get the current directory of this module
+    // Build payload with a default negative prompt.
+    let payload = { 
+      prompt: finalPrompt,
+      negative_prompt: sdxlParams.negative_prompt || ""
+    };
+    if (model === "stable-diffusion-xl-base-1.0") {
+      payload.height = sdxlParams.height || 512;
+      payload.width = sdxlParams.width || 512;
+      payload.num_steps = sdxlParams.num_steps || 20;
+      payload.guidance = sdxlParams.guidance || 7.5;
+      payload.seed = sdxlParams.seed || 12345;
+    }
+
+    const response = await fetchImageWithRetry(payload, model, 3, 1000);
+    
+    let imageBuffer;
+    if (model === "stable-diffusion-xl-base-1.0") {
+      imageBuffer = Buffer.from(response.data);
+    } else {
+      if (!(response.data && response.data.result && response.data.result.image)) {
+        throw new Error("No image data received.");
+      }
+      imageBuffer = Buffer.from(response.data.result.image, "base64");
+    }
+    console.info("Image data received.");
+
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-
-    // Set the temp_video folder as the base directory for generated images.
-    // Adjust the path as needed (here we assume temp_video is one level up)
     const tempDir = path.join(__dirname, "../temp_video");
     const folderPath = path.join(tempDir, "generated_images");
 
-    // Ensure the folder exists
-    try {
-      mkdirSync(folderPath, { recursive: true });
-      console.log("Folder exists or created successfully:", folderPath);
-    } catch (err) {
-      console.error("Error creating directory:", err.message);
-      throw new Error("Error creating directory: " + err.message);
-    }
-
-    // Create a random file name
+    mkdirSync(folderPath, { recursive: true });
     const randomFileName = crypto.randomBytes(15).toString("hex");
-    console.log("Generated random file name:", randomFileName);
-
-    // File path with extension
     const filePath = path.join(folderPath, `${randomFileName}.jpg`);
 
-    // Save the image file locally
     writeFileSync(filePath, imageBuffer);
-    console.log("Image saved successfully to:", filePath);
+    console.info("Image saved.");
 
-    // Return the file path
     return { image: filePath };
   } catch (error) {
-    console.error("Error during image generation:", error.message);
+    console.error("Error generating image:", error.message);
     throw new Error("Error generating image: " + error.message);
   }
 }

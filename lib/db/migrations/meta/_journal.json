@@ -15,6 +15,13 @@
       "when": 1739658927567,
       "tag": "0001_common_silverclaw",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1740031672153,
+      "tag": "0002_tiresome_kitty_pryde",
+      "breakpoints": true
     }
   ]
 }

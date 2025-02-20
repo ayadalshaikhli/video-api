@@ -14,9 +14,31 @@ import { dirname } from "path";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
 
-dotenv.config();
+// Import DB functions for video styles and voices.
+import { fetchVideoStylesByIds, fetchVoicesByIds } from "../data/media-styles.js";
+// Import the LLM image prompter.
+import { generateImagePrompts } from "../actions/image-prompter.js";
 
+dotenv.config();
 ffmpeg.setFfmpegPath(ffmpegStatic);
+
+// Helper to get SDXL parameters from video style record.
+function getSdxlParams(styleRecord) {
+  const defaultParams = {
+    model: "flux-1-schnell",
+    negative_prompt: "",
+    height: 512,
+    width: 512,
+    num_steps: 20,
+    guidance: 7.5,
+    seed: 0,
+  };
+  if (!styleRecord || !styleRecord.sdxlParams) return defaultParams;
+  return {
+    ...defaultParams,
+    ...styleRecord.sdxlParams,
+  };
+}
 
 async function fetchAudio(audioUrl) {
   try {
@@ -32,13 +54,6 @@ async function fetchAudio(audioUrl) {
   }
 }
 
-function cleanBase64(base64String) {
-  if (base64String.startsWith("data:")) {
-    return base64String.split(",")[1];
-  }
-  return base64String;
-}
-
 function secondsToSrt(seconds) {
   const date = new Date(seconds * 1000);
   const hours = date.getUTCHours().toString().padStart(2, "0");
@@ -48,24 +63,14 @@ function secondsToSrt(seconds) {
   return `${hours}:${minutes}:${secs},${ms}`;
 }
 
-function transcriptionToWordBySrtEntry(words) {
-  let srt = "";
-  let index = 1;
-  words.forEach((word, i) => {
-    const startTime = Math.max(0, word.start - 0.05);
-    const endTime = word.end + 0.05;
-    const prevWords = words.slice(Math.max(0, i - 2), i).map((w) => w.word);
-    const currentWord = word.word;
-    const nextWords = words.slice(i + 1, i + 3).map((w) => w.word);
-    const displayText = [...prevWords, `<b>${currentWord}</b>`, ...nextWords]
-      .join(" ")
-      .trim();
-    srt += `${index}\n`;
-    srt += `${secondsToSrt(startTime)} --> ${secondsToSrt(endTime)}\n`;
-    srt += `${displayText}\n\n`;
-    index++;
-  });
-  return srt;
+function convertTimestamp(timeString) {
+  const seconds = parseFloat(timeString);
+  const date = new Date(seconds * 1000);
+  const hh = String(date.getUTCHours()).padStart(2, "0");
+  const mm = String(date.getUTCMinutes()).padStart(2, "0");
+  const ss = String(date.getUTCSeconds()).padStart(2, "0");
+  const ms = String(date.getUTCMilliseconds()).padStart(3, "0");
+  return `${hh}:${mm}:${ss},${ms}`;
 }
 
 function convertVttToSrt(vtt) {
@@ -91,16 +96,6 @@ function convertVttToSrt(vtt) {
   return srt;
 }
 
-function convertTimestamp(timeString) {
-  const seconds = parseFloat(timeString);
-  const date = new Date(seconds * 1000);
-  const hh = String(date.getUTCHours()).padStart(2, "0");
-  const mm = String(date.getUTCMinutes()).padStart(2, "0");
-  const ss = String(date.getUTCSeconds()).padStart(2, "0");
-  const ms = String(date.getUTCMilliseconds()).padStart(3, "0");
-  return `${hh}:${mm}:${ss},${ms}`;
-}
-
 async function getAudioDuration(audioPath) {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(audioPath, (err, metadata) => {
@@ -114,12 +109,15 @@ async function getAudioDuration(audioPath) {
 }
 
 export const UrlToVideoController = async (req, res) => {
-  // Get the base directory for temporary files
+  console.log("Request body:", req.body);
+
+  // Base directories for temporary files and generated images.
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
   const baseTempDir = path.join(__dirname, "../temp_video");
+  const generatedImagesDir = path.join(__dirname, "../generated_images");
 
-  // Create a unique temporary directory for this job
+  // Create a unique temporary directory for this job.
   const jobTempDir = path.join(
     baseTempDir,
     `job-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`
@@ -131,39 +129,75 @@ export const UrlToVideoController = async (req, res) => {
 
   try {
     const user = await getUserFromSession(req);
-    const { url } = req.body;
-    if (!url) {
-      return res
-        .status(400)
-        .json({ success: false, message: "URL is required." });
+    const { url, text, projectTitle, captionId, videoStyleId, voiceId } = req.body;
+
+    if (!url && !text) {
+      return res.status(400).json({ success: false, message: "Either URL or text input is required." });
     }
-    const content = await scrapeContent(url);
-    const summarizedContent = await summarizeText(content);
-    if (!summarizedContent || summarizedContent === "No summary generated") {
-      console.error("❌ No valid summary was generated.");
-      return res.status(500).json({
-        success: false,
-        message: "Failed to generate a valid summary.",
-      });
+
+    // Determine final script.
+    let finalScript;
+    if (text && text.trim().length > 0) {
+      finalScript = text;
+      console.log("Using provided text as script.");
+    } else {
+      const content = await scrapeContent(url);
+      const summary = await summarizeText(content);
+      if (!summary || summary === "No summary generated") {
+        console.error("❌ No valid summary was generated.");
+        return res.status(500).json({ success: false, message: "Failed to generate a valid summary." });
+      }
+      finalScript = summary;
     }
-    const voiceId = 9;
+
+    // Set forced subtitle style based on captionId.
+    let forcedSubtitleStyle;
+    switch (captionId?.toString()) {
+      case "1":
+        forcedSubtitleStyle = "FontName=Roboto,FontSize=30,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,BackColour=&HAA000000&,BorderStyle=3,Outline=1,Shadow=1";
+        break;
+      case "2":
+        forcedSubtitleStyle = "FontName=Impact,FontSize=36,PrimaryColour=&H00F2FF76&,OutlineColour=&H00000000&,BackColour=&HAAFF0000&,BorderStyle=3,Outline=2,Shadow=1";
+        break;
+      case "3":
+        forcedSubtitleStyle = "FontName=Arial,FontSize=32,PrimaryColour=&H00F2FF76&,OutlineColour=&H00000000&,BackColour=&HAA000000&,BorderStyle=3,Outline=1,Shadow=1";
+        break;
+      default:
+        forcedSubtitleStyle = "FontName=Roboto,FontSize=30,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,BackColour=&HAA000000&,BorderStyle=3,Outline=1,Shadow=1";
+    }
+    console.log("Forced subtitle style:", forcedSubtitleStyle);
+
+    // Fetch video style and voice details.
+    let videoStyleRecord = null;
+    if (videoStyleId) {
+      const videoStyleResults = await fetchVideoStylesByIds([videoStyleId]);
+      if (videoStyleResults.length > 0) {
+        videoStyleRecord = videoStyleResults[0];
+      }
+    }
+    let voiceRecord = null;
+    if (voiceId) {
+      const voiceResults = await fetchVoicesByIds([voiceId]);
+      if (voiceResults.length > 0) {
+        voiceRecord = voiceResults[0];
+      }
+    }
+    const finalVoiceId = voiceRecord ? parseInt(voiceRecord.id, 10) : 9;
     const languageIsoCode = "en-us";
+
+    // Generate speech (audio).
     const speechResult = await generateSpeechAndSave({
-      prompt: summarizedContent,
-      voiceId,
+      prompt: finalScript,
+      voiceId: finalVoiceId,
       languageIsoCode,
       userOverride: user,
     });
     const audioUrl = speechResult.audioUrl;
+
+    // Transcribe audio.
     const transcriptionResult = await whisperAudio(audioUrl);
-    if (
-      !transcriptionResult.success ||
-      !transcriptionResult.text ||
-      !transcriptionResult.vtt
-    ) {
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to transcribe audio." });
+    if (!transcriptionResult.success || !transcriptionResult.text || !transcriptionResult.vtt) {
+      return res.status(500).json({ success: false, message: "Failed to transcribe audio." });
     }
     console.log("Transcribed text:", transcriptionResult.text);
     const srtContent = convertVttToSrt(transcriptionResult.vtt);
@@ -171,28 +205,7 @@ export const UrlToVideoController = async (req, res) => {
     fs.writeFileSync(subtitlePath, srtContent);
     console.log("SRT file created at:", subtitlePath);
 
-    // Split the summarized content into chunks.
-    const summarizedContentChunks = summarizedContent
-      .split(". ")
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length > 0);
-    console.log(
-      "Summarized content chunks:",
-      summarizedContentChunks,
-      "Total chunks:",
-      summarizedContentChunks.length
-    );
-
-    let imagePaths = [];
-    for (const chunk of summarizedContentChunks) {
-      const imageResult = await generateImageFromPrompt(chunk);
-      console.log(`Image generated at: ${imageResult.image}`);
-      imagePaths.push(imageResult.image);
-    }
-    console.log("Total images generated:", imagePaths.length);
-    console.log("Image paths array:", imagePaths);
-
-    // Save audio file to disk.
+    // Save audio locally and calculate duration.
     const audioBuffer = await fetchAudio(audioUrl);
     const audioPath = path.join(jobTempDir, "speech_audio.mp3");
     fs.writeFileSync(audioPath, audioBuffer);
@@ -200,29 +213,61 @@ export const UrlToVideoController = async (req, res) => {
     const audioDuration = await getAudioDuration(audioPath);
     console.log("Audio duration:", audioDuration, "seconds");
 
-    // Compute duration per image.
-    const numberOfImages = imagePaths.length;
-    console.log("Total images generated:", numberOfImages);
-    const durationPerImage = audioDuration / numberOfImages;
-    console.log("Duration per image:", durationPerImage, "seconds");
+    // Decide number of images to generate.
+    const numImages = Math.max(1, Math.round(audioDuration / 6.5));
+    console.log("Number of images to generate:", numImages);
 
-    // Create the FFmpeg images list file.
+    // Build video style guidelines from the style record.
+    let videoStyleGuidelines = "";
+    if (videoStyleRecord && videoStyleRecord.prompts) {
+      if (Array.isArray(videoStyleRecord.prompts)) {
+        videoStyleGuidelines = videoStyleRecord.prompts.join(" ");
+      } else {
+        videoStyleGuidelines = videoStyleRecord.prompts;
+      }
+    }
+    console.log("Video style guidelines:", videoStyleGuidelines);
+
+    // Retrieve advanced SDXL parameters from video style record.
+    const sdxlParams = videoStyleRecord ? getSdxlParams(videoStyleRecord) : {
+      model: "flux-1-schnell",
+      negative_prompt: "",
+      height: 512,
+      width: 512,
+      num_steps: 20,
+      guidance: 7.5,
+      seed: 0,
+    };
+    console.log("SDXL Params:", sdxlParams);
+
+    // Generate image prompts via LLM.
+    const imagePrompts = await generateImagePrompts(transcriptionResult.text, videoStyleGuidelines, numImages);
+    console.log("LLM generated image prompts:", imagePrompts);
+
+    // Generate images for each prompt.
+    let imagePaths = [];
+    for (const prompt of imagePrompts) {
+      const imageResult = await generateImageFromPrompt(prompt, videoStyleGuidelines, sdxlParams.model, sdxlParams);
+      console.log(`Image generated at: ${imageResult.image}`);
+      imagePaths.push(imageResult.image);
+    }
+    console.log("Total images generated:", imagePaths.length);
+
+    // Create FFmpeg images list file.
     const imageListPath = path.join(jobTempDir, "images.txt");
     let imageListContent = "";
-    if (numberOfImages > 0) {
-      imagePaths.forEach((imgPath) => {
-        const formattedPath = imgPath.replace(/\\/g, "/");
-        imageListContent += `file '${formattedPath}'\n`;
-        imageListContent += `duration ${durationPerImage}\n`;
-      });
-      const lastImagePath = imagePaths[numberOfImages - 1].replace(/\\/g, "/");
-      imageListContent += `file '${lastImagePath}'\n`;
-    }
+    const durationPerImage = audioDuration / imagePaths.length;
+    imagePaths.forEach((imgPath) => {
+      const formattedPath = imgPath.replace(/\\/g, "/");
+      imageListContent += `file '${formattedPath}'\n`;
+      imageListContent += `duration ${durationPerImage}\n`;
+    });
+    const lastImagePath = imagePaths[imagePaths.length - 1].replace(/\\/g, "/");
+    imageListContent += `file '${lastImagePath}'\n`;
     fs.writeFileSync(imageListPath, imageListContent);
     console.log("Created images list file at:", imageListPath);
-    console.log("Images list content:\n", imageListContent);
 
-    // Create slideshow video from images.
+    // Create slideshow video.
     const slideshowPath = path.join(jobTempDir, "slideshow.mp4");
     const finalVideoPath = path.join(jobTempDir, "output_video.mp4");
     let slideshowStderr = "";
@@ -238,11 +283,7 @@ export const UrlToVideoController = async (req, res) => {
         })
         .on("error", (err) => {
           console.error("Error in slideshow pass:", err);
-          reject(
-            new Error(
-              `Slideshow error:\n${slideshowStderr}\n${err.message}`
-            )
-          );
+          reject(new Error(`Slideshow error:\n${slideshowStderr}\n${err.message}`));
         })
         .on("end", () => {
           console.log("Slideshow video created at:", slideshowPath);
@@ -251,15 +292,13 @@ export const UrlToVideoController = async (req, res) => {
         .save(slideshowPath);
     });
 
+    // Prepare subtitle filter.
     const fontsDir = path.resolve(__dirname, "../fonts");
-    const formattedSubtitlePath = subtitlePath
-      .replace(/\\/g, "/")
-      .replace(/^([A-Z]):/, "$1\\:");
-    const formattedFontsDir = fontsDir
-      .replace(/\\/g, "/")
-      .replace(/^([A-Z]):/, "$1\\:");
-    const subtitlesFilter = `subtitles='${formattedSubtitlePath}:fontsdir=${formattedFontsDir}:force_style=FontName=Roboto,FontSize=30,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,BackColour=&HAA000000&,BorderStyle=3,Outline=1,Shadow=1'`;
+    const formattedSubtitlePath = subtitlePath.replace(/\\/g, "/").replace(/^([A-Z]):/, "$1\\:");
+    const formattedFontsDir = fontsDir.replace(/\\/g, "/").replace(/^([A-Z]):/, "$1\\:");
+    const subtitlesFilter = `subtitles='${formattedSubtitlePath}:fontsdir=${formattedFontsDir}:force_style=${forcedSubtitleStyle}'`;
     const vfFilter = `fps=30,${subtitlesFilter}`;
+
     let mergeStderr = "";
     await new Promise((resolve, reject) => {
       ffmpeg()
@@ -274,7 +313,7 @@ export const UrlToVideoController = async (req, res) => {
           audioDuration.toString(),
           "-y",
           "-loglevel",
-          "verbose",
+          "verbose"
         ])
         .on("stderr", (line) => {
           console.log("FFmpeg (merge) stderr:", line);
@@ -282,9 +321,7 @@ export const UrlToVideoController = async (req, res) => {
         })
         .on("error", (err) => {
           console.error("Error in merge pass:", err);
-          reject(
-            new Error(`Merge error:\n${mergeStderr}\n${err.message}`)
-          );
+          reject(new Error(`Merge error:\n${mergeStderr}\n${err.message}`));
         })
         .on("end", () => {
           console.log("Final video created at:", finalVideoPath);
@@ -296,26 +333,33 @@ export const UrlToVideoController = async (req, res) => {
     const videoFile = {
       buffer: fs.readFileSync(finalVideoPath),
       originalname: "output_video.mp4",
-      mimetype: "video/mp4",
+      mimetype: "video/mp4"
     };
     const uploadResult = await uploadVideoFile(videoFile);
     console.log("Video uploaded. Public URL:", uploadResult.publicUrl);
 
-    // Remove this job's temporary files after successful upload.
-    fs.rmSync(jobTempDir, { recursive: true, force: true });
-    console.log("Job temporary files removed.");
-
     return res.json({
       success: true,
-      message:
-        "Video created, uploaded, and temporary files removed successfully!",
-      data: { videoUrl: uploadResult.publicUrl },
+      message: "Video created, uploaded, and temporary files removed successfully!",
+      data: { videoUrl: uploadResult.publicUrl }
     });
   } catch (error) {
     console.error("Error in processing:", error);
-    return res.status(500).json({
-      success: false,
-      message: `Error: ${error.message}`,
-    });
+    return res.status(500).json({ success: false, message: `Error: ${error.message}` });
+  } finally {
+    // Remove job temporary directory.
+    if (fs.existsSync(jobTempDir)) {
+      fs.rmSync(jobTempDir, { recursive: true, force: true });
+      console.log("Job temporary files removed in finally block.");
+    }
+    // Remove the generated_images folder.
+    if (fs.existsSync(generatedImagesDir)) {
+      fs.rmSync(generatedImagesDir, { recursive: true, force: true });
+      console.log("Generated images folder removed in finally block.");
+    }
+    if (fs.existsSync('../temp_video')) {
+      fs.rmSync('../temp_video', { recursive: true, force: true });
+      console.log("Generated images folder removed in finally block.");
+    }
   }
 };
