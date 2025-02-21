@@ -113,6 +113,7 @@ export async function generateSpeechAndSave({
     };
 
     try {
+        console.log("Sending request to Zyphra API...");
         // Retry the API call if necessary
         const response = await autoRetryFetch(
             "http://api.zyphra.com/v1/audio/text-to-speech",

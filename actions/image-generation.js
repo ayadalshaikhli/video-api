@@ -4,28 +4,23 @@ import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Utility: Delay execution
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Combine the main prompt and video style prompt.
-// If videoStylePrompt is an array, join its elements.
-// If it's a string, concatenate it.
-// If it's an object, join its values.
+// Only combine if videoStylePrompt is a string or an array.
 function combinePrompts(mainPrompt, videoStylePrompt) {
   if (!videoStylePrompt) return mainPrompt;
-  if (Array.isArray(videoStylePrompt)) {
-    return videoStylePrompt.join(" ") + " " + mainPrompt;
-  } else if (typeof videoStylePrompt === "string") {
+  if (typeof videoStylePrompt === "string") {
     return mainPrompt + " " + videoStylePrompt;
-  } else if (typeof videoStylePrompt === "object") {
-    return Object.values(videoStylePrompt).join(" ") + " " + mainPrompt;
   }
+  if (Array.isArray(videoStylePrompt)) {
+    return mainPrompt + " " + videoStylePrompt.join(" ");
+  }
+  // If videoStylePrompt is an object, ignore it (or customize as needed)
   return mainPrompt;
 }
 
-// Select the API endpoint based on the selected model.
 function getEndpoint(model) {
   if (model === "stable-diffusion-xl-base-1.0") {
     return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/stabilityai/stable-diffusion-xl-base-1.0`;
@@ -33,7 +28,6 @@ function getEndpoint(model) {
   return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`;
 }
 
-// Retry helper WITHOUT NSFW handling.
 async function fetchImageWithRetry(payload, model = "flux-1-schnell", maxRetries = 3, delayMs = 1000, axiosConfig = {}) {
   const API_KEY = process.env.CLOUDFLARE_API_KEY;
   const API_URL = getEndpoint(model);
@@ -58,9 +52,6 @@ async function fetchImageWithRetry(payload, model = "flux-1-schnell", maxRetries
   }
 }
 
-// Main function: generateImageFromPrompt.
-// Accepts a prompt (string or object), an optional videoStylePrompt,
-// an optional model (default "flux-1-schnell"), and optional sdxlParams.
 export async function generateImageFromPrompt(prompt, videoStylePrompt = null, model = "flux-1-schnell", sdxlParams = {}) {
   try {
     let mainPrompt;
@@ -76,9 +67,8 @@ export async function generateImageFromPrompt(prompt, videoStylePrompt = null, m
     if (model === "stable-diffusion-xl-base-1.0") {
       finalPrompt = finalPrompt.replace(/AI_PROMPT_\d+/gi, "").trim();
     }
-    console.info("Final prompt set.");
+    console.info("Final prompt set:", finalPrompt);
 
-    // Build payload with a default negative prompt.
     let payload = { 
       prompt: finalPrompt,
       negative_prompt: sdxlParams.negative_prompt || ""
@@ -90,6 +80,8 @@ export async function generateImageFromPrompt(prompt, videoStylePrompt = null, m
       payload.guidance = sdxlParams.guidance || 7.5;
       payload.seed = sdxlParams.seed || 12345;
     }
+    // Log the payload sent to the AI.
+    console.info("Payload for image generation:", payload);
 
     const response = await fetchImageWithRetry(payload, model, 3, 1000);
     

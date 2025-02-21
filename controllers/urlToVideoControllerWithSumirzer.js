@@ -8,6 +8,7 @@ import fetch from "node-fetch";
 import dotenv from "dotenv";
 
 import { scrapeContent } from "../actions/scrape.js";
+import { summarizeText } from "../actions/summarize.js";
 import { generateSpeechAndSave } from "../actions/text-to-audio.js";
 import { getUserFromSession } from "../utils/session.js";
 import { generateImageFromPrompt } from "../actions/image-generation.js";
@@ -79,18 +80,24 @@ export const UrlToVideoController = async (req, res) => {
       });
     }
 
-    // If text is provided, use it directly; otherwise, scrape the URL and use that content.
     let finalScript;
     if (text && text.trim().length > 0) {
       finalScript = text;
       console.log("Using provided text as script.");
     } else {
       const content = await scrapeContent(url);
-      finalScript = content;
-      console.log("Using scraped content as script (no summarization).");
+      const summary = await summarizeText(content);
+      if (!summary || summary === "No summary generated") {
+        console.error("No valid summary was generated.");
+        return res
+          .status(500)
+          .json({ success: false, message: "Failed to generate a valid summary." });
+      }
+      finalScript = summary;
     }
 
     // Decide style based on captionId using your utility.
+    // (This variable is used only to log the chosen style; the subtitle utility is later used.)
     let chosenStyle = "DefaultStyle";
     switch (captionId?.toString()) {
       case "1":
@@ -178,14 +185,14 @@ export const UrlToVideoController = async (req, res) => {
     const sdxlParams = videoStyleRecord
       ? getSdxlParams(videoStyleRecord)
       : {
-        model: "flux-1-schnell",
-        negative_prompt: "",
-        height: 512,
-        width: 512,
-        num_steps: 20,
-        guidance: 7.5,
-        seed: 0,
-      };
+          model: "flux-1-schnell",
+          negative_prompt: "",
+          height: 512,
+          width: 512,
+          num_steps: 20,
+          guidance: 7.5,
+          seed: 0,
+        };
 
     // Generate image prompts via LLM
     const imagePrompts = await generateImagePrompts(
@@ -250,6 +257,7 @@ export const UrlToVideoController = async (req, res) => {
     const fontsDir = path.resolve(__dirname, "../fonts");
     const formattedAssPath = assPath.replace(/\\/g, "/").replace(/^([A-Z]):/, "$1\\:");
     const formattedFontsDir = fontsDir.replace(/\\/g, "/").replace(/^([A-Z]):/, "$1\\:");
+    // Removed the :fontprovider=auto option to avoid FFmpeg error.
     const subtitlesFilter = `subtitles='${formattedAssPath}:fontsdir=${formattedFontsDir}'`;
     const vfFilter = `fps=30,${subtitlesFilter}`;
 
@@ -291,11 +299,6 @@ export const UrlToVideoController = async (req, res) => {
     console.error("Error in processing:", err);
     return res.status(500).json({ success: false, message: `Error: ${err.message}` });
   } finally {
-    if (fs.existsSync(baseTempDir)) {
-      fs.rmSync(baseTempDir, { recursive: true, force: true });
-      console.log("Temp_video folder removed in finally block.");
-    }
-
     if (fs.existsSync(jobTempDir)) {
       fs.rmSync(jobTempDir, { recursive: true, force: true });
       console.log("Job temporary files removed in finally block.");
