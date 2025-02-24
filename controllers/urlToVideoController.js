@@ -15,7 +15,8 @@ import { whisperAudio } from "../actions/whisper.js";
 import { uploadVideoFile } from "../actions/cloudflare.js";
 import { fetchVideoStylesByIds, fetchVoicesByIds } from "../data/media-styles.js";
 import { generateImagePrompts } from "../actions/image-prompter.js";
-import { vttToAss, getAssStyleInfoFromCaptionId } from "../utils/subtitleUtiles.js";
+import { vttToAss, getAssStyleInfoFromCaptionId, wordsToAss } from "../utils/subtitleUtiles.js";
+import { createShortVideo, updateShortVideo } from "../actions/create-short-video.js";
 
 dotenv.config();
 ffmpeg.setFfmpegPath(ffmpegStatic);
@@ -79,6 +80,22 @@ export const UrlToVideoController = async (req, res) => {
       });
     }
 
+
+    const videoData = {
+      url,          // This can be null or the value sent in req.body
+      text,
+      captionId,
+      videoStyleId,
+      voiceId,
+      projectTitle,
+      userId: user.id,
+    };
+
+
+
+    // Create the short video record (pending)
+    const shortVideo = await createShortVideo(videoData);
+    console.log("Short video created:", shortVideo);
     // If text is provided, use it directly; otherwise, scrape the URL and use that content.
     let finalScript;
     if (text && text.trim().length > 0) {
@@ -242,7 +259,7 @@ export const UrlToVideoController = async (req, res) => {
     // Create subtitles using your subtitle utility.
     const styleInfo = getAssStyleInfoFromCaptionId(captionId);
     const assPath = path.join(jobTempDir, "subtitles.ass");
-    const assContent = vttToAss(transcriptionResult.vtt, styleInfo);
+    const assContent = wordsToAss(transcriptionResult.words, styleInfo, transcriptionResult.vtt);
     fs.writeFileSync(assPath, assContent, "utf8");
 
     // Merge final video
@@ -281,6 +298,7 @@ export const UrlToVideoController = async (req, res) => {
       mimetype: "video/mp4",
     };
     const uploadResult = await uploadVideoFile(videoFile);
+    await updateShortVideo({ id: shortVideo.id, videoUrl: uploadResult.publicUrl });
 
     return res.json({
       success: true,

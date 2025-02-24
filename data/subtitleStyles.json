@@ -1,0 +1,10 @@
+{
+    "youtuber": {
+        "styleName": "YoutuberStyle",
+        "assDefinition": "Style: YoutuberStyle,Roboto,52,&H00FFFFFF,&H000000FF,&HFF000000,&HD0FFB6C1,1,0,0,0,100,100,0,0,3,3,2,2,10,10,10,1"
+    },
+    "supreme": {
+        "styleName": "SupremeStyle",
+        "assDefinition": "Style: SupremeStyle,Impact,60,&H00F2FF76,&H000000FF,&HFF000000,&HD0ADD8E6,1,0,0,0,100,100,0,0,3,4,2,2,10,10,10,1"
+    }
+}

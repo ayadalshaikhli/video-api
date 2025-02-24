@@ -1,0 +1,1 @@
+ALTER TABLE "short_videos" ALTER COLUMN "caption_style_id" DROP NOT NULL;

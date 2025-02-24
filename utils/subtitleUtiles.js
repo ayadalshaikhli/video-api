@@ -1,33 +1,34 @@
 export const styleDefinitions = {
   youtuber: {
     styleName: "YoutuberStyle",
-    assDefinition: "Style: YoutuberStyle,Roboto,52,&H00FFFFFF,&H000000FF,&HFF000000,&HD0FFB6C1,1,0,0,0,100,100,0,0,3,3,2,2,10,10,10,1"
+    assDefinition: "Style: YoutuberStyle,Knewave-Regular,48,&H00FFFFFF,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,3,4,2,2,10,10,100,1",
   },
   supreme: {
     styleName: "SupremeStyle",
-    assDefinition: "Style: SupremeStyle,Impact,60,&H00F2FF76,&H000000FF,&HFF000000,&HD0ADD8E6,1,0,0,0,100,100,0,0,3,4,2,2,10,10,10,1"
+    assDefinition: "Style: SupremeStyle,PoetsenOne-Regular,60,&H000080FF,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,3,4,2,2,10,10,100,1"
   },
   neon: {
     styleName: "NeonStyle",
-    assDefinition: "Style: NeonStyle,Arial,48,&H00F2FF76,&H000000FF,&HFF000000,&HDD000000,0,0,0,0,100,100,0,0,3,5,2,2,10,10,10,1"
+    assDefinition: "Style: NeonStyle,Arial,48,&H0000FF00,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,3,4,2,2,10,10,100,1"
   },
   glitch: {
     styleName: "GlitchStyle",
-    assDefinition: "Style: GlitchStyle,Courier New,48,&H00F2FF76,&H000000FF,&HFF000000,&HD08A2BE,0,0,0,0,100,100,0,0,3,4,2,2,10,10,10,1"
+    assDefinition: "Style: GlitchStyle,Courier New,48,&H00FF00FF,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,3,4,2,2,10,10,100,1"
   },
   fire: {
     styleName: "FireStyle",
-    assDefinition: "Style: FireStyle,Verdana,48,&H00FF4500,&H000000FF,&HFF000000,&HD0FFA500,0,0,0,0,100,100,0,0,3,6,2,2,10,10,10,1"
+    assDefinition: "Style: FireStyle,Verdana,48,&H000045FF,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,3,4,2,2,10,10,100,1"
   },
   futuristic: {
     styleName: "FuturisticStyle",
-    assDefinition: "Style: FuturisticStyle,Monaco,48,&H0000FFFF,&H000000FF,&HFF000000,&HD0C0C0C,0,0,0,0,100,100,0,0,3,5,2,2,10,10,10,1"
+    assDefinition: "Style: FuturisticStyle,Monaco,48,&H00FFFF00,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,3,4,2,2,10,10,100,1"
   },
   default: {
     styleName: "DefaultStyle",
-    assDefinition: "Style: DefaultStyle,Roboto,52,&H00FFFFFF,&H000000FF,&HFF000000,&HD0D0D0D,0,0,0,0,100,100,0,0,3,3,2,2,10,10,10,1"
+    assDefinition: "Style: DefaultStyle,Roboto,52,&H00FFFFFF,&H00FFFFFF,&HFF000000,&H00000000,1,0,0,0,100,100,0,0,3,4,2,2,10,10,100,1"
   },
 };
+
 
 export function getAssStyleInfoFromCaptionId(captionId) {
   switch (captionId) {
@@ -83,13 +84,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   return scriptInfo + stylesSection + eventsHeader + eventsContent;
 }
 
-/**
- * Generates an ASS subtitle file that highlights each word individually using karaoke timing.
- * @param {Array} wordsArray - Array of words with properties: word, start, end.
- * @param {Object} baseStyle - The base style info to use.
- * @returns {string} The complete ASS subtitle file as a string.
- */
-export function wordsToAss(wordsArray, baseStyle) {
+export function wordsToAss(wordsArray, baseStyle, vttContent) {
   const scriptInfo = `[Script Info]
 ScriptType: v4.00+
 Collisions: Normal
@@ -110,18 +105,49 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
   let eventsContent = "";
-  for (const wordObj of wordsArray) {
-    const startTime = convertToAssTime(wordObj.start);
-    const endTime = convertToAssTime(wordObj.end);
 
-    // Compute word duration in centiseconds for karaoke timing
-    const duration = Math.round((wordObj.end - wordObj.start) * 100);
+  // Loop through words in chunks of 3
+  for (let i = 0; i < wordsArray.length; i += 3) {
+    // Create a chunk of 3 words (or fewer if it's the last chunk)
+    const chunk = wordsArray.slice(i, i + 3);
 
-    // Apply Karaoke Highlighting (\k)
-    const text = `{\\k${duration}}${wordObj.word}`;
+    // Set the duration for the chunk (from the start of the first word to the end of the last word)
+    const chunkDuration = chunk[chunk.length - 1].end - chunk[0].start;
 
-    eventsContent += `Dialogue: 0,${startTime},${endTime},${baseStyle.styleName},,0,0,0,,${text}\n`;
+    // Start constructing the text for the chunk
+    let chunkText = "";
+    let highlightDuration = 0;
+
+    // Apply the karaoke effect (\k) for each word in the chunk
+    chunk.forEach((wordObj, index) => {
+      const startTime = convertToAssTime(wordObj.start);
+      const endTime = convertToAssTime(wordObj.end);
+
+      // Calculate the duration in centiseconds for the karaoke
+      const duration = Math.round((wordObj.end - wordObj.start) * 100);
+
+      // Apply karaoke to each word sequentially, no background color applied
+      let wordText = wordObj.word;
+      if (index === 0) {
+        wordText = `{\\k${duration}}${wordObj.word}`; // Highlight the first word
+      } else if (index === 1) {
+        wordText = `{\\k${duration}}${wordObj.word}`; // Highlight the second word
+      } else if (index === 2) {
+        wordText = `{\\k${duration}}${wordObj.word}`; // Highlight the third word
+      }
+
+      // Append the word to the chunk text
+      chunkText += wordText + " ";
+
+      // Add the word as a dialogue event (but we're controlling this at the chunk level now)
+      // eventsContent += `Dialogue: 0,${startTime},${endTime},${baseStyle.styleName},,0,0,0,,${wordText}\n`;
+    });
+
+    // Add the chunk as a single subtitle event
+    eventsContent += `Dialogue: 0,${convertToAssTime(chunk[0].start)},${convertToAssTime(chunk[chunk.length - 1].end)},${baseStyle.styleName},,0,0,0,,${chunkText.trim()}\n`;
   }
 
   return scriptInfo + stylesSection + eventsHeader + eventsContent;
 }
+
+

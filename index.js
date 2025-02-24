@@ -16,6 +16,9 @@ import uploadRoute from "./routes/uploadRoute.js";
 import textToSpeechRoute from "./routes/textToSpeechRoute.js";
 import speechToTextRoute from "./routes/speechToTextRoute.js";
 import urlToVideoRoute from "./routes/urlToVideoRoute.js";
+// import lambdaVideoGenerationRoute from "./routes/lambdaVideoGenerationRoute.js";
+// import instagramRoute from "./routes/instagramRoute.js";
+// import subtitleStylesRoute from "./routes/subtitleStylesRoute.js";
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -70,6 +73,10 @@ app.use("/api/upload", restrictedCors, restrictOriginMiddleware, uploadRoute);
 app.use("/api/text-to-speech", restrictedCors, restrictOriginMiddleware, textToSpeechRoute);
 app.use("/api/speech-to-text", restrictedCors, restrictOriginMiddleware, speechToTextRoute);
 app.use("/api/url-to-video", restrictedCors, restrictOriginMiddleware, urlToVideoRoute);
+// app.use("/api/lambda-video-generation", restrictedCors, restrictOriginMiddleware, lambdaVideoGenerationRoute);
+// app.use("/api/instagram", openCors, instagramRoute);
+// app.use("/api/convert", openCors, subtitleStylesRoute);
+
 
 // New conversion route (you can decide if it should be open or restricted)
 app.use("/api/convert", openCors, convertRoute);
