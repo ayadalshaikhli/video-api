@@ -8,7 +8,7 @@ export const whisperAudio = async (audioUrl, saveToFile = false) => {
         // Your Cloudflare API credentials
         const cfAccountId = process.env.CLOUDFLARE_ACCOUNT_ID;
         const cfApiToken = process.env.CLOUDFLARE_API_KEY;
-        const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/ai/run/@cf/openai/whisper-tiny-en`;
+        const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/ai/run/@cf/openai/whisper`;
 
         // Check for valid Cloudflare API credentials
         if (!cfAccountId || !cfApiToken) {
