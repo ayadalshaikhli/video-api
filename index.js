@@ -20,6 +20,8 @@ import videoToCaptionRoute from "./routes/videoToCaptionRoute.js";
 // import lambdaVideoGenerationRoute from "./routes/lambdaVideoGenerationRoute.js";
 // import instagramRoute from "./routes/instagramRoute.js";
 // import subtitleStylesRoute from "./routes/subtitleStylesRoute.js";
+import blogAutomationRoute from './routes/blogAutomationRoute.js';
+import audioTranscriptionRoute from './routes/audioTranscriptionRoute.js';
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -77,6 +79,10 @@ app.use("/api/url-to-video", restrictedCors, restrictOriginMiddleware, urlToVide
 app.use("/api/tiktok/upload", restrictedCors, restrictOriginMiddleware, uploadRoute);
 app.use("/api/tiktok/callback", openCors, syncRoute);
 app.use("/api/video-caption", restrictedCors, restrictOriginMiddleware, videoToCaptionRoute);
+app.use("/api/audio-text", restrictedCors, restrictOriginMiddleware, videoToCaptionRoute);
+app.use('/api/blog-automation', restrictedCors, restrictOriginMiddleware, blogAutomationRoute);
+app.use('/api/audio-transcription', restrictedCors, restrictOriginMiddleware, audioTranscriptionRoute);
+
 // app.use("/api/lambda-video-generation", restrictedCors, restrictOriginMiddleware, lambdaVideoGenerationRoute);
 // app.use("/api/instagram", openCors, instagramRoute);
 // app.use("/api/convert", openCors, subtitleStylesRoute);

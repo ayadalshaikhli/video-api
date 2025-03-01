@@ -51,19 +51,21 @@ Style: Default,${selectedFont},${fontSize},${selectedColor},0,0,0,0,100,100,0,0,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
   segments.forEach(seg => {
-    // Helper to convert seconds to ASS time format (H:MM:SS.cs)
+    // Convert seconds to ASS time format (H:MM:SS.cs)
     const formatTime = (timeInSeconds) => {
       const hours = Math.floor(timeInSeconds / 3600);
       const minutes = Math.floor((timeInSeconds % 3600) / 60);
       const seconds = (timeInSeconds % 60).toFixed(2).padStart(5, "0");
       return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds}`;
     };
-    const startTimeFormatted = formatTime(seg.startTime);
-    const endTimeFormatted = formatTime(seg.endTime);
-    assContent += `Dialogue: 0,${startTimeFormatted},${endTimeFormatted},Default,,0,0,0,,${seg.text}\n`;
+    // Use the correct property names from your JSON
+    const startTimeFormatted = formatTime(seg.start);
+    const endTimeFormatted = formatTime(seg.end);
+    assContent += `Dialogue: 0,${startTimeFormatted},${endTimeFormatted},Default,,0,0,0,,${seg.word}\n`;
   });
   return assContent;
 }
+
 
 /**
  * Main controller to handle both transcription and export actions.
@@ -201,6 +203,156 @@ export const VideoCaptionController = async (req, res) => {
     return res.status(500).json({ success: false, message: `Error: ${err.message}` });
   } finally {
     // Clean up temporary directories.
+    if (fs.existsSync(jobTempDir)) {
+      fs.rmSync(jobTempDir, { recursive: true, force: true });
+      console.log("Job temporary files removed.");
+    }
+  }
+};
+
+export const VideoSubmissionController = async (req, res) => {
+  console.log("Final submission request received.");
+  console.log("Request body:", req.body);
+  const { baseTempDir, jobTempDir } = createJobTempDir();
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Video file required for final submission." });
+    }
+    // Parse the final user modifications from the request
+    let editedCaptions;
+    try {
+      editedCaptions = JSON.parse(req.body.editedCaptions);
+    } catch (err) {
+      return res.status(400).json({ success: false, message: "Invalid editedCaptions JSON." });
+    }
+    const { projectTitle, selectedFont, selectedColor, fontSize } = req.body;
+    console.log("Final submission with project title:", projectTitle);
+
+    // Save the uploaded video file.
+    const videoPath = path.join(jobTempDir, req.file.originalname);
+    fs.writeFileSync(videoPath, req.file.buffer);
+    console.log("Video saved for final submission at:", videoPath);
+
+    // Generate the ASS subtitle file using the final caption segments.
+    const assContent = generateAssFromCaptions(editedCaptions, { selectedFont, selectedColor, fontSize, projectTitle });
+    const assPath = path.join(jobTempDir, "subtitles.ass");
+    fs.writeFileSync(assPath, assContent, "utf8");
+    console.log("ASS subtitle file created at:", assPath);
+
+    // Merge the subtitles into the video with FFmpeg.
+    const finalVideoPath = path.join(jobTempDir, "output_video.mp4");
+    const fontsDir = path.resolve(process.cwd(), "fonts"); // Adjust if needed.
+    const formattedAssPath = assPath.replace(/\\/g, "/").replace(/^([A-Z]):/, "$1\\:");
+    const formattedFontsDir = fontsDir.replace(/\\/g, "/").replace(/^([A-Z]):/, "$1\\:");
+    const subtitlesFilter = `subtitles='${formattedAssPath}:fontsdir=${formattedFontsDir}'`;
+    const vfFilter = `fps=30,${subtitlesFilter}`;
+
+    await new Promise((resolve, reject) => {
+      let stderr = "";
+      ffmpeg()
+        .input(videoPath)
+        .audioCodec("copy")
+        .videoCodec("libx264")
+        .outputOptions([
+          "-vf", vfFilter,
+          "-y",
+          "-loglevel", "verbose",
+        ])
+        .on("stderr", (line) => { stderr += line + "\n"; })
+        .on("error", (err) => reject(new Error(`Merge error:\n${stderr}\n${err.message}`)))
+        .on("end", () => resolve(true))
+        .save(finalVideoPath);
+    });
+    console.log("Final video with updated captions created at:", finalVideoPath);
+
+    // Upload the final video (e.g., to R2) using your upload utility.
+    const videoFileObj = {
+      buffer: fs.readFileSync(finalVideoPath),
+      originalname: "output_video.mp4",
+      mimetype: "video/mp4",
+    };
+    const uploadResult = await uploadVideoFile(videoFileObj);
+    console.log("Uploaded final video. URL:", uploadResult.publicUrl);
+
+    return res.json({
+      success: true,
+      message: "Final video processed and uploaded successfully.",
+      data: { videoUrl: uploadResult.publicUrl },
+    });
+  } catch (err) {
+    console.error("Error in VideoSubmissionController:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  } finally {
+    // Clean up temporary files.
+    if (fs.existsSync(jobTempDir)) {
+      fs.rmSync(jobTempDir, { recursive: true, force: true });
+      console.log("Job temporary files removed.");
+    }
+  }
+};
+
+export const PythonSubmissionController = async (req, res) => {
+  console.log("Python submission request received.");
+  console.log("Request body:", req.body);
+  const { baseTempDir, jobTempDir } = createJobTempDir();
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Video file required for Python submission." });
+    }
+    // Parse the final user modifications from the request
+    let editedCaptions;
+    try {
+      editedCaptions = JSON.parse(req.body.editedCaptions);
+    } catch (err) {
+      return res.status(400).json({ success: false, message: "Invalid editedCaptions JSON." });
+    }
+    // Destructure the new styling values from the request body.
+    const { projectTitle, selectedFont, selectedColor, fontSize, backgroundPadding, backgroundBorderRadius } = req.body;
+    console.log("Python submission with project title:", projectTitle);
+
+    // Save the uploaded video file.
+    const videoPath = path.join(jobTempDir, req.file.originalname);
+    fs.writeFileSync(videoPath, req.file.buffer);
+    console.log("Video saved for Python submission at:", videoPath);
+
+    // Prepare form data to send to the Python endpoint.
+    const formData = new FormData();
+    // Read the file into a buffer and create a Blob (Node.js v18+ supports global Blob)
+    const fileBuffer = fs.readFileSync(videoPath);
+    const blob = new Blob([fileBuffer], { type: req.file.mimetype });
+    formData.append("video", blob, req.file.originalname);
+    formData.append("editedCaptions", JSON.stringify(editedCaptions));
+    formData.append("projectTitle", projectTitle);
+    formData.append("selectedFont", selectedFont);
+    formData.append("selectedColor", selectedColor);
+    formData.append("fontSize", fontSize);
+    // Append the new styling values.
+    formData.append("backgroundPadding", backgroundPadding);
+    formData.append("backgroundBorderRadius", backgroundBorderRadius);
+
+    // Construct the Python endpoint URL.
+    const pythonEndpoint = `${process.env.PYTHON_ENDPOINT}/video-submit`;
+    console.log("Forwarding submission to Python endpoint:", pythonEndpoint);
+
+    // Forward the data using fetch.
+    const response = await fetch(pythonEndpoint, {
+      method: "POST",
+      body: formData
+      // Let formData set the Content-Type automatically.
+    });
+    const data = await response.json();
+    console.log("Python endpoint response:", data);
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+    return res.json(data);
+  } catch (err) {
+    console.error("Error in PythonSubmissionController:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  } finally {
+    // Clean up temporary files.
     if (fs.existsSync(jobTempDir)) {
       fs.rmSync(jobTempDir, { recursive: true, force: true });
       console.log("Job temporary files removed.");
