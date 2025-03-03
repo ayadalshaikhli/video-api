@@ -22,6 +22,7 @@ import videoToCaptionRoute from "./routes/videoToCaptionRoute.js";
 // import subtitleStylesRoute from "./routes/subtitleStylesRoute.js";
 import blogAutomationRoute from './routes/blogAutomationRoute.js';
 import audioTranscriptionRoute from './routes/audioTranscriptionRoute.js';
+import videoShortsRoute from "./routes/videoShortsRoute.js";
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -82,6 +83,8 @@ app.use("/api/video-caption", restrictedCors, restrictOriginMiddleware, videoToC
 app.use("/api/audio-text", restrictedCors, restrictOriginMiddleware, videoToCaptionRoute);
 app.use('/api/blog-automation', restrictedCors, restrictOriginMiddleware, blogAutomationRoute);
 app.use('/api/audio-transcription', restrictedCors, restrictOriginMiddleware, audioTranscriptionRoute);
+app.use("/api/video-shorts", restrictedCors, restrictOriginMiddleware, videoShortsRoute);
+
 
 // app.use("/api/lambda-video-generation", restrictedCors, restrictOriginMiddleware, lambdaVideoGenerationRoute);
 // app.use("/api/instagram", openCors, instagramRoute);

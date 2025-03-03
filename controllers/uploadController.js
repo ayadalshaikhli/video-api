@@ -18,12 +18,11 @@ export const uploadController = async (req, res) => {
 
         let payload;
         try {
-            payload = await verifyToken(sessionCookie); // the same function from Next.js
+            payload = await verifyToken(sessionCookie); 
         } catch (err) {
             console.error("[uploadController] JWT verify fail:", err);
             return res.status(401).json({ error: "Invalid session token" });
         }
-        // 1. Extract userId + projectName from form data
         const userId = payload?.user?.id;
         if (!userId) {
             return res.status(401).json({ error: "Invalid session payload" });
@@ -32,7 +31,6 @@ export const uploadController = async (req, res) => {
         const projectName = req.body.projectName || "";
         console.log("[uploadController] userId =", userId, "projectName =", projectName);
 
-        // 2. Extract the file from Multer
         const file = req.file;
         if (!file) {
             return res.status(400).json({ error: "No file uploaded" });
@@ -61,28 +59,30 @@ export const uploadController = async (req, res) => {
         if (durationSeconds < 15) {
             return res.status(400).json({ error: "Audio duration must be at least 15 seconds." });
         }
-        if (durationSeconds >= 600) { // 10 min = 600 seconds
+        if (durationSeconds >= 600) { // 10 minutes = 600 seconds
             return res.status(400).json({ error: "Audio duration must be less than 10 minutes." });
         }
         // Convert to minutes, round to 2 decimals
         const durationMinutes = Math.round((durationSeconds / 60) * 100) / 100;
-        console.log("[uploadController] Duration (minutes):", durationMinutes);
+        // Convert minutes to credits: 1 minute = 100 credits
+        const durationCredits = Math.round(durationMinutes * 100);
+        console.log("[uploadController] Duration (minutes):", durationMinutes, "which equals", durationCredits, "credits");
 
-        // 4. Check user credits
+        // 4. Check user credits (now in credits)
         const userCreditsData = await getUserCredits(parseInt(userId, 10));
         if (!userCreditsData) {
             return res.status(500).json({ error: "Could not retrieve user credits" });
         }
-        const availableMinutes = userCreditsData.totalCredits;
-        console.log("[uploadController] user credits:", availableMinutes, "available, needed:", durationMinutes);
-        if (availableMinutes < durationMinutes) {
+        const availableCredits = userCreditsData.totalCredits;
+        console.log("[uploadController] User credits:", availableCredits, "available, needed:", durationCredits);
+        if (availableCredits < durationCredits) {
             return res.status(400).json({
-                error: "Insufficient minutes to process this file. Please purchase more minutes.",
+                error: "Insufficient credits to process this file. Please purchase more credits.",
                 insufficient: true,
             });
         }
 
-        // 5. Request presigned URL (retry up to 100 times)
+        // 5. Request presigned URL (retry up to 200 times)
         console.log("[uploadController] Requesting presigned URL...");
         let attempts = 0;
         let presignedData;
@@ -153,7 +153,7 @@ export const uploadController = async (req, res) => {
                 url: presignedUrl,
                 filename: finalFilename,
                 status: "Draft",
-                duration: durationMinutes, // store duration in minutes
+                duration: durationCredits, // store duration in credits
             });
             console.log("✅ Project inserted successfully.");
         } catch (dbError) {
@@ -166,7 +166,7 @@ export const uploadController = async (req, res) => {
             presignedUrl,
             awsId,
             filename: finalFilename,
-            duration: durationMinutes,
+            duration: durationCredits,
         });
     } catch (err) {
         console.error("[uploadController] Unexpected error:", err);
