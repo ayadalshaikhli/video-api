@@ -33,18 +33,18 @@ const app = express();
 const server = http.createServer(app);
 
 // Allowed origins
-// const allowedOrigins = [
-//     "https://www.vairality.fun",
-//     "https://vairality.fun",
-//     'http://localhost:3000',
-//     'http://localhost:8082',
-//     'http://192.168.1.2:8082',
-// ];
-
 const allowedOrigins = [
     "https://www.vairality.fun",
     "https://vairality.fun",
+    'http://localhost:3000',
+    'http://localhost:8082',
+    'http://192.168.1.2:8082',
 ];
+
+// const allowedOrigins = [
+//     "https://www.vairality.fun",
+//     "https://vairality.fun",
+// ];
 
 
 const restrictOriginMiddleware = (req, res, next) => {
