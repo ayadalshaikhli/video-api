@@ -23,6 +23,8 @@ import videoToCaptionRoute from "./routes/videoToCaptionRoute.js";
 import blogAutomationRoute from './routes/blogAutomationRoute.js';
 import audioTranscriptionRoute from './routes/audioTranscriptionRoute.js';
 import videoShortsRoute from "./routes/videoShortsRoute.js";
+import authRoutes from "./routes/authRoute.js"; // <---- import the file we just created
+import audioRoute from "./routes/app/audioRoute.js"; // <---- import the file we just created
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -31,22 +33,39 @@ const app = express();
 const server = http.createServer(app);
 
 // Allowed origins
+// const allowedOrigins = [
+//     "https://www.vairality.fun",
+//     "https://vairality.fun",
+//     'http://localhost:3000',
+//     'http://localhost:8082',
+//     'http://192.168.1.2:8082',
+// ];
+
 const allowedOrigins = [
     "https://www.vairality.fun",
     "https://vairality.fun",
-    'http://localhost:3000',
 ];
+
 
 const restrictOriginMiddleware = (req, res, next) => {
     const origin = req.headers.origin;
     console.log(`[Middleware] Incoming request from origin: ${origin}`);
-    if (!origin || !allowedOrigins.includes(origin)) {
+    
+    if (!origin) {
+        // Log but allow requests with no Origin header
+        console.warn("[Middleware] No origin header present. Allowing request.");
+        return next();
+    }
+
+    if (!allowedOrigins.includes(origin)) {
         console.error(`[Middleware] Access forbidden for origin: ${origin}`);
         return res.status(403).json({ error: "Access forbidden: Invalid origin." });
     }
+
     console.log(`[Middleware] Origin ${origin} is allowed.`);
     next();
 };
+
 
 const openCors = cors({ origin: "*" });
 const restrictedCors = cors({ origin: allowedOrigins, credentials: true });
@@ -69,6 +88,8 @@ app.use((req, res, next) => {
 });
 
 console.log("[Server] Registering routes...");
+app.use("/api/auth", openCors, authRoutes);
+app.use("/api/app/audio", openCors, audioRoute);
 app.use("/api/generate", openCors, generateRouter);
 app.use("/api/test-route", openCors, TestRoute);
 app.use("/videos", openCors, videoRoutes);
