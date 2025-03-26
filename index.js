@@ -23,8 +23,9 @@ import videoToCaptionRoute from "./routes/videoToCaptionRoute.js";
 import blogAutomationRoute from './routes/blogAutomationRoute.js';
 import audioTranscriptionRoute from './routes/audioTranscriptionRoute.js';
 import videoShortsRoute from "./routes/videoShortsRoute.js";
-import authRoutes from "./routes/authRoute.js"; // <---- import the file we just created
-import audioRoute from "./routes/app/audioRoute.js"; // <---- import the file we just created
+import authRoutes from "./routes/authRoute.js"; 
+import audioRoute from "./routes/app/audioRoute.js";
+import videooRoute from "./routes/app/videoRoute.js"; 
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -90,6 +91,7 @@ app.use((req, res, next) => {
 console.log("[Server] Registering routes...");
 app.use("/api/auth", openCors, authRoutes);
 app.use("/api/app/audio", openCors, audioRoute);
+app.use("/api/app/video", openCors, videooRoute);
 app.use("/api/generate", openCors, generateRouter);
 app.use("/api/test-route", openCors, TestRoute);
 app.use("/videos", openCors, videoRoutes);
