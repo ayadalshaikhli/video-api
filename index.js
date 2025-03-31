@@ -78,10 +78,10 @@ app.use(cookieParser());
 
 // Additional logging middleware
 app.use((req, res, next) => {
-    console.log(`[Request] ${req.method} ${req.originalUrl}`);
-    console.log(`  Query: ${JSON.stringify(req.query)}`);
-    console.log(`  Headers: ${JSON.stringify(req.headers)}`);
-    console.log(`  Remote Address: ${req.ip}`);
+    // console.log(`[Request] ${req.method} ${req.originalUrl}`);
+    // console.log(`  Query: ${JSON.stringify(req.query)}`);
+    // console.log(`  Headers: ${JSON.stringify(req.headers)}`);
+    // console.log(`  Remote Address: ${req.ip}`);
     if (req.method !== "GET") {
         console.log(`  Body: ${JSON.stringify(req.body)}`);
     }
@@ -92,6 +92,7 @@ console.log("[Server] Registering routes...");
 app.use("/api/auth", openCors, authRoutes);
 app.use("/api/app/audio", openCors, audioRoute);
 app.use("/api/app/video", openCors, videooRoute);
+
 app.use("/api/generate", openCors, generateRouter);
 app.use("/api/test-route", openCors, TestRoute);
 app.use("/videos", openCors, videoRoutes);

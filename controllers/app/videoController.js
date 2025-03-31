@@ -2,7 +2,7 @@ import fetch from "node-fetch";
 import axios from "axios";
 import mp3Duration from "mp3-duration";
 import { db } from "../../lib/db/drizzle.js";
-import { videoProjects, creditUsage, userCredits } from "../../lib/db/schema.js";
+import { videoProjects, creditUsage, userCredits, videoStyles } from "../../lib/db/schema.js";
 import { eq, sql } from "drizzle-orm";
 import { verifyToken } from "../../lib/auth/session.js";
 import { apiClient } from "../../utils/auth.js";
@@ -191,3 +191,24 @@ export const step4Controller = async (req, res) => {
     return res.status(500).json({ error:"Step4 failed" });
   }
 };
+
+// Youtube Shorts
+export const youtubeVideoStylesConroller = async (req, res) => {
+  
+  const userId = await getUserId(req, res);
+  if (!userId) return; 
+
+
+  const activeVideoStyles = await db
+    .select({
+      id: videoStyles.id,
+      name: videoStyles.name,
+      imageUrl: videoStyles.imageUrl,
+      description: videoStyles.description,
+    })
+    .from(videoStyles)
+    .where(eq(videoStyles.isActive, true));
+
+
+  return res.status(200).json(activeVideoStyles);
+}
