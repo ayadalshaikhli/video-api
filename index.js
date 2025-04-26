@@ -26,6 +26,8 @@ import videoShortsRoute from "./routes/videoShortsRoute.js";
 import authRoutes from "./routes/authRoute.js"; 
 import audioRoute from "./routes/app/audioRoute.js";
 import videooRoute from "./routes/app/videoRoute.js"; 
+import imageGenerationRoute from "./routes/imageGenerationRoute.js";
+import elevenLabsRoute from "./routes/elevenLabsRoute.js";
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -92,6 +94,8 @@ console.log("[Server] Registering routes...");
 app.use("/api/auth", openCors, authRoutes);
 app.use("/api/app/audio", openCors, audioRoute);
 app.use("/api/app/video", openCors, videooRoute);
+app.use("/api/app/images", openCors, imageGenerationRoute);
+app.use("/api/elevenlabs", openCors, elevenLabsRoute);
 
 app.use("/api/generate", openCors, generateRouter);
 app.use("/api/test-route", openCors, TestRoute);

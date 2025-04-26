@@ -123,29 +123,71 @@ export async function uploadVoiceFile(file) {
 }
 
 export async function uploadImageFile(file) {
+  console.log("[uploadImageFile] Starting image upload to Cloudflare R2");
+  
   if (!file) {
+    console.error("[uploadImageFile] No file provided");
     throw new Error("No file provided");
   }
 
-  const fileBuffer = getFileBuffer(file);
-  const originalName = getOriginalName(file) || "image.jpg"; // Default to .jpg if no name
-  const extMatch = originalName.match(/\.[0-9a-z]+$/i);
-  const extension = extMatch ? extMatch[0] : ".jpg";
-  const randomFileName = crypto.randomBytes(16).toString("hex");
+  console.log("[uploadImageFile] File details:");
+  console.log("  - Original name:", getOriginalName(file));
+  console.log("  - Content type:", getContentType(file));
+  console.log("  - Buffer size:", file.buffer ? file.buffer.length : "unknown");
+  
+  // Check R2 configuration
+  console.log("[uploadImageFile] Checking R2 configuration:");
+  console.log("  - Endpoint available:", process.env.CLOUDFLARE_R2_ENDPOINT ? "Yes" : "No");
+  console.log("  - Access Key ID available:", process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ? "Yes" : "No");
+  console.log("  - Secret Key available:", process.env.CLOUDFLARE_R2_ACCESS_KEY_SECRET ? 
+    `Yes (${process.env.CLOUDFLARE_R2_ACCESS_KEY_SECRET.substring(0, 3)}...)` : "No");
+  console.log("  - Bucket name:", process.env.CLOUDFLARE_R2_BUCKET);
+  console.log("  - Dev endpoint:", process.env.CLOUDFLARE_R2_DEV_ENDPOINT);
 
-  const key = `images/${randomFileName}${extension}`;
-  const contentType = getContentType(file);
+  try {
+    const fileBuffer = getFileBuffer(file);
+    console.log("[uploadImageFile] Successfully got file buffer. Size:", fileBuffer.length);
+    
+    const originalName = getOriginalName(file) || "image.jpg"; // Default to .jpg if no name
+    const extMatch = originalName.match(/\.[0-9a-z]+$/i);
+    const extension = extMatch ? extMatch[0] : ".jpg";
+    const randomFileName = crypto.randomBytes(16).toString("hex");
+    const key = `images/${randomFileName}${extension}`;
+    console.log("[uploadImageFile] Generated storage key:", key);
+    
+    const contentType = getContentType(file);
+    console.log("[uploadImageFile] Content type for upload:", contentType);
 
-  const command = new PutObjectCommand({
-    Bucket: process.env.CLOUDFLARE_R2_BUCKET,
-    Key: key,
-    Body: fileBuffer,
-    ContentType: contentType,
-  });
+    const command = new PutObjectCommand({
+      Bucket: process.env.CLOUDFLARE_R2_BUCKET,
+      Key: key,
+      Body: fileBuffer,
+      ContentType: contentType,
+    });
 
-  await r2Client.send(command);
-  const publicUrl = `${process.env.CLOUDFLARE_R2_DEV_ENDPOINT}/${key}`;
-  return { key, publicUrl };
+    console.log("[uploadImageFile] Sending upload command to R2");
+    try {
+      const result = await r2Client.send(command);
+      console.log("[uploadImageFile] Upload successful. Result:", JSON.stringify(result));
+    } catch (uploadError) {
+      console.error("[uploadImageFile] R2 upload error:", uploadError);
+      if (uploadError.Code) {
+        console.error("[uploadImageFile] Error code:", uploadError.Code);
+      }
+      if (uploadError.message) {
+        console.error("[uploadImageFile] Error message:", uploadError.message);
+      }
+      throw uploadError;
+    }
+    
+    const publicUrl = `${process.env.CLOUDFLARE_R2_DEV_ENDPOINT}/${key}`;
+    console.log("[uploadImageFile] Generated public URL:", publicUrl);
+    
+    return { key, publicUrl };
+  } catch (error) {
+    console.error("[uploadImageFile] Unhandled error during upload:", error);
+    throw error;
+  }
 }
 
 export async function uploadVideoFile(file) {
