@@ -74,10 +74,29 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
  * For export: body.action = "export" and body.editedCaptions (JSON string) plus styling fields.
  */
 export const VideoCaptionController = async (req, res) => {
+  console.log("=== VideoCaptionController called ===");
+  console.log("Request method:", req.method);
+  console.log("Request headers:", req.headers);
+  console.log("Request body:", req.body);
+  console.log("Request body type:", typeof req.body);
+  console.log("Request body keys:", Object.keys(req.body || {}));
+  console.log("Request file:", req.file ? "File present" : "No file");
+  if (req.file) {
+    console.log("File details:", {
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      encoding: req.file.encoding,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
+  }
+  
   const { baseTempDir, jobTempDir } = createJobTempDir();
 
   try {
     const action = req.body.action;
+    console.log("Action extracted:", action);
+    console.log("Action type:", typeof action);
     if (action === "transcribe") {
       // === TRANSCRIBE BRANCH ===
       if (!req.file) {
@@ -200,7 +219,16 @@ export const VideoCaptionController = async (req, res) => {
     }
   } catch (err) {
     console.error("Error in VideoCaptionController:", err);
-    return res.status(500).json({ success: false, message: `Error: ${err.message}` });
+    console.error("Error stack:", err.stack);
+    
+    // Ensure we always return JSON, never HTML
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        success: false, 
+        message: `Server error: ${err.message}`,
+        error: err.message 
+      });
+    }
   } finally {
     // Clean up temporary directories.
     if (fs.existsSync(jobTempDir)) {

@@ -41,6 +41,7 @@ const allowedOrigins = [
     "https://vairality.fun",
     'http://localhost:3000',
     'http://localhost:8082',
+    'http://localhost:9469',
     'http://192.168.1.2:8082',
 ];
 
@@ -80,12 +81,15 @@ app.use(cookieParser());
 
 // Additional logging middleware
 app.use((req, res, next) => {
-    // console.log(`[Request] ${req.method} ${req.originalUrl}`);
-    // console.log(`  Query: ${JSON.stringify(req.query)}`);
-    // console.log(`  Headers: ${JSON.stringify(req.headers)}`);
-    // console.log(`  Remote Address: ${req.ip}`);
+    console.log(`[Request] ${req.method} ${req.originalUrl}`);
+    console.log(`  Query: ${JSON.stringify(req.query)}`);
+    console.log(`  Headers: ${JSON.stringify(req.headers)}`);
+    console.log(`  Remote Address: ${req.ip}`);
+    console.log(`  Content-Type: ${req.headers['content-type']}`);
+    console.log(`  Content-Length: ${req.headers['content-length']}`);
     if (req.method !== "GET") {
         console.log(`  Body: ${JSON.stringify(req.body)}`);
+        console.log(`  Body keys: ${Object.keys(req.body || {})}`);
     }
     next();
 });
