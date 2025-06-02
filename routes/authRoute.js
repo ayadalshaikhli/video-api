@@ -17,14 +17,28 @@ import {
   hashPassword,
   comparePasswords,
   setSession,
-  verifyToken
+  verifyToken,
+  clearSession
 } from '../lib/auth/session.js';
 // If you have createCheckoutSession logic, import it (or remove if not needed)
 // import { createCheckoutSession } from '@/lib/payments/stripe';
 import { getUserWithTeam } from '../lib/db/queries.js'; // if you have this helper
+import { getAuthURL, handleCallback, listChannels } from "../controllers/AuthController.js";
 // ------------------------------------------
 
 const router = express.Router();
+
+// Add validation schemas
+const signInSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+const signUpSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  inviteId: z.string().optional(),
+});
 
 /** 
  * Helper to log an activity if you want the same logic 
@@ -40,6 +54,26 @@ async function logActivity(teamId, userId, type, ipAddress) {
   });
 }
 
+// Custom error handler
+const handleError = (error, res) => {
+  if (error instanceof z.ZodError) {
+    return res.status(400).json({
+      error: 'Validation error',
+      details: error.errors.map(err => ({
+        field: err.path.join('.'),
+        message: err.message
+      }))
+    });
+  }
+  
+  if (error.code === '23505') { // PostgreSQL unique violation
+    return res.status(409).json({ error: 'Email already exists' });
+  }
+  
+  console.error('[Auth Error]:', error);
+  return res.status(500).json({ error: 'Internal server error' });
+};
+
 /** 
  * signIn
  * Replicates the logic from your Next.js `signIn` validated action:
@@ -50,38 +84,65 @@ async function logActivity(teamId, userId, type, ipAddress) {
  *  5) Return { success: true, user: { ... } } or { error: "..."} 
  */
 router.post("/signin", async (req, res) => {
-    try {
-      const { email, password } = req.body;
-  
-      // 1. Find the user in your DB:
-      const foundUser = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, email))
-        .limit(1);
-  
-      if (!foundUser || foundUser.length === 0) {
-        return res.status(401).json({ error: "Invalid email or password." });
-      }
-  
-      // 2. Compare passwords:
-      const userRecord = foundUser[0]; // or however you access the user
-      const validPassword = await comparePasswords(password, userRecord.passwordHash);
-      if (!validPassword) {
-        return res.status(401).json({ error: "Invalid email or password." });
-      }
-  
-      // 3. If valid, pass the actual user object to setSession:
-      await setSession(res, userRecord);
-      
-      // Return success
-      return res.json({ success: true, user: { id: userRecord.id, email: userRecord.email } });
-    } catch (error) {
-      console.error("[signin] error:", error);
-      return res.status(500).json({ error: "Internal Server Error" });
+  try {
+    // Validate request body
+    const validatedData = signInSchema.parse(req.body);
+    console.log("signin route hit")
+    console.log(validatedData, "validatedData") 
+    const { email, password } = validatedData;
+
+    console.log('[signin] Attempting signin for email:', email);
+    console.log('[signin] Password provided:', password ? 'YES' : 'NO');
+    console.log('[signin] Password length:', password?.length || 0);
+
+    // 1. Find the user in your DB:
+    const foundUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    console.log('[signin] Users found in DB:', foundUser.length);
+    
+    if (!foundUser || foundUser.length === 0) {
+      console.log('[signin] No user found with email:', email);
+      return res.status(401).json({ error: "Invalid credentials" });
     }
-  });
-  
+
+    // 2. Compare passwords:
+    const userRecord = foundUser[0];
+    console.log('[signin] User found with ID:', userRecord.id);
+    console.log('[signin] User email from DB:', userRecord.email);
+    console.log('[signin] User has password hash:', userRecord.passwordHash ? 'YES' : 'NO');
+    
+    const validPassword = await comparePasswords(password, userRecord.passwordHash);
+    console.log('[signin] Password comparison result:', validPassword);
+    
+    if (!validPassword) {
+      console.log('[signin] Password comparison failed for user:', userRecord.email);
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // 3. Set session
+    console.log('[signin] Setting session for user:', userRecord.email);
+    await setSession(res, userRecord);
+    
+    console.log('[signin] Signin successful for user:', userRecord.email);
+    
+    // Return success with minimal user data
+    return res.json({
+      success: true,
+      user: {
+        id: userRecord.id,
+        email: userRecord.email,
+        role: userRecord.role
+      }
+    });
+  } catch (error) {
+    console.error('[signin] Error during signin:', error);
+    return handleError(error, res);
+  }
+});
 
 /**
  * signUp
@@ -96,113 +157,141 @@ router.post("/signin", async (req, res) => {
  */
 router.post('/signup', async (req, res) => {
   try {
-    const { email, password, inviteId } = req.body;
+    // Validate request body
+    const validatedData = signUpSchema.parse(req.body);
+    const { email, password, inviteId } = validatedData;
 
-    // Basic validation checks
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required.' });
-    }
-
-    // 1) Check if user already exists
-    const existingUser = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (existingUser.length > 0) {
-      return res.status(400).json({ error: 'User with this email already exists.' });
-    }
-
-    // 2) Hash password
-    const passwordHash = await hashPassword(password);
-
-    // 3) Insert user
-    const newUserData = {
-      email,
-      passwordHash,
-      role: 'owner' // default role (overridden if there's an invitation)
-    };
-    const [createdUser] = await db.insert(users).values(newUserData).returning();
-
-    if (!createdUser) {
-      return res.status(400).json({ error: 'Failed to create user.' });
-    }
-
-    // 4) If inviteId is provided, validate the invitation & link to existing team
-    let teamId;
-    let userRole;
-    let createdTeam;
-
-    if (inviteId) {
-      // Check if there's a valid invitation
-      const [invitation] = await db
+    // Start a transaction
+    const result = await db.transaction(async (trx) => {
+      // Check existing user
+      const existingUser = await trx
         .select()
-        .from(invitations)
-        .where(
-          and(
-            eq(invitations.id, parseInt(inviteId, 10)),
-            eq(invitations.email, email),
-            eq(invitations.status, 'pending')
-          )
-        )
+        .from(users)
+        .where(eq(users.email, email))
         .limit(1);
 
-      if (!invitation) {
-        return res.status(400).json({ error: 'Invalid or expired invitation.' });
+      if (existingUser.length > 0) {
+        throw new Error('USER_EXISTS');
       }
 
-      teamId = invitation.teamId;
-      userRole = invitation.role;
+      // Hash password
+      const passwordHash = await hashPassword(password);
 
-      // Mark invitation as accepted
-      await db
-        .update(invitations)
-        .set({ status: 'accepted' })
-        .where(eq(invitations.id, invitation.id));
+      // Create user
+      const [createdUser] = await trx
+        .insert(users)
+        .values({
+          email,
+          passwordHash,
+          role: 'owner'
+        })
+        .returning();
 
-      // Log acceptance
-      await logActivity(teamId, createdUser.id, ActivityType.ACCEPT_INVITATION, req.ip);
-
-      // Fetch that team if you want
-      [createdTeam] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
-    } else {
-      // Otherwise, create a new team
-      const [insertedTeam] = await db.insert(teams).values({
-        name: `${email}'s Team`
-      }).returning();
-      if (!insertedTeam) {
-        return res.status(400).json({ error: 'Failed to create team.' });
+      if (!createdUser) {
+        throw new Error('FAILED_TO_CREATE_USER');
       }
-      teamId = insertedTeam.id;
-      userRole = 'owner';
-      createdTeam = insertedTeam;
 
-      // Log creation
-      await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM, req.ip);
-    }
+      let teamId;
+      let userRole;
+      let createdTeam;
 
-    // 5) Insert row into teamMembers
-    await db.insert(teamMembers).values({
-      userId: createdUser.id,
-      teamId: teamId,
-      role: userRole
+      if (inviteId) {
+        // Handle invitation logic
+        const [invitation] = await trx
+          .select()
+          .from(invitations)
+          .where(
+            and(
+              eq(invitations.id, parseInt(inviteId, 10)),
+              eq(invitations.email, email),
+              eq(invitations.status, 'pending')
+            )
+          )
+          .limit(1);
+
+        if (!invitation) {
+          throw new Error('INVALID_INVITATION');
+        }
+
+        teamId = invitation.teamId;
+        userRole = invitation.role;
+
+        await trx
+          .update(invitations)
+          .set({ status: 'accepted' })
+          .where(eq(invitations.id, invitation.id));
+
+        [createdTeam] = await trx
+          .select()
+          .from(teams)
+          .where(eq(teams.id, teamId))
+          .limit(1);
+      } else {
+        // Create new team
+        [createdTeam] = await trx
+          .insert(teams)
+          .values({
+            name: `${email}'s Team`
+          })
+          .returning();
+
+        if (!createdTeam) {
+          throw new Error('FAILED_TO_CREATE_TEAM');
+        }
+
+        teamId = createdTeam.id;
+        userRole = 'owner';
+      }
+
+      // Create team member
+      await trx.insert(teamMembers).values({
+        userId: createdUser.id,
+        teamId: teamId,
+        role: userRole
+      });
+
+      return { createdUser, createdTeam };
     });
 
-    await logActivity(teamId, createdUser.id, ActivityType.SIGN_UP, req.ip);
+    // Set session after successful transaction
+    await setSession(res, result.createdUser);
 
-    // 6) setSession to automatically log them in
-    await setSession(createdUser);
+    // Log activity outside transaction
+    await logActivity(
+      result.createdTeam.id,
+      result.createdUser.id,
+      inviteId ? ActivityType.ACCEPT_INVITATION : ActivityType.SIGN_UP,
+      req.ip
+    );
 
-    // 7) Return JSON
     return res.json({
       success: true,
       user: {
-        id: createdUser.id,
-        email: createdUser.email,
-        role: createdUser.role
-        // etc.
+        id: result.createdUser.id,
+        email: result.createdUser.email,
+        role: result.createdUser.role
       },
-      // If needed, team: createdTeam
+      team: {
+        id: result.createdTeam.id,
+        name: result.createdTeam.name
+      }
     });
   } catch (error) {
-    console.error('[signup] error:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    // Handle specific error cases
+    if (error.message === 'USER_EXISTS') {
+      return res.status(409).json({ error: 'User with this email already exists.' });
+    }
+    if (error.message === 'INVALID_INVITATION') {
+      return res.status(400).json({ error: 'Invalid or expired invitation.' });
+    }
+    if (error.message === 'FAILED_TO_CREATE_USER') {
+      return res.status(400).json({ error: 'Failed to create user.' });
+    }
+    if (error.message === 'FAILED_TO_CREATE_TEAM') {
+      return res.status(400).json({ error: 'Failed to create team.' });
+    }
+    
+    return handleError(error, res);
   }
 });
 
@@ -214,45 +303,40 @@ router.post('/signup', async (req, res) => {
  */
 router.post('/signout', async (req, res) => {
   try {
+    console.log('[signout] Processing signout request');
+    
     // If you want to log the sign-out, you need the user's ID from the cookie
     const sessionCookie = req.cookies?.session;
+    console.log('[signout] Session cookie exists:', !!sessionCookie);
+    
     if (sessionCookie) {
       // decode token to get user
       try {
         const decoded = await verifyToken(sessionCookie);
         const userId = decoded?.user?.id;
+        console.log('[signout] User ID from token:', userId);
+        
         if (userId) {
           const userWithTeam = await getUserWithTeam(userId);
           await logActivity(userWithTeam?.teamId, userId, ActivityType.SIGN_OUT, req.ip);
+          console.log('[signout] Activity logged for user:', userId);
         }
       } catch (err) {
-        // no-op if token invalid
+        console.log('[signout] Token verification failed (expected if already expired):', err.message);
+        // no-op if token invalid - this is expected for expired tokens
       }
     }
 
-    // Now remove the cookie
-    // This logic parallels what you do in `signOut` on Next.js:
-    // If production, set domain = ".vairality.fun", sameSite = "none", etc.
-    res.clearCookie('session', {
-      httpOnly: true,
-      secure: true,
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      domain: process.env.NODE_ENV === 'production' ? '.vairality.fun' : undefined
-    });
-
-    // Alternatively, to forcibly overwrite the cookie with an expired date:
-    // res.cookie('session', '', {
-    //   httpOnly: true,
-    //   secure: true,
-    //   sameSite: 'none',
-    //   domain: '.vairality.fun',
-    //   expires: new Date(0),
-    // });
+    // Use the proper clearSession function to ensure cookie is cleared with matching options
+    clearSession(res);
+    console.log('[signout] Session cookie cleared');
 
     return res.json({ success: true });
   } catch (error) {
     console.error('[signout] error:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    // Even if there's an error, we should still clear the session
+    clearSession(res);
+    return res.json({ success: true }); // Don't fail signout due to logging errors
   }
 });
 
@@ -264,17 +348,30 @@ router.post('/signout', async (req, res) => {
  */
 router.get('/session', async (req, res) => {
   try {
+    console.log('[session] Checking session...');
+    
     const sessionCookie = req.cookies?.session;
+    console.log('[session] Session cookie exists:', !!sessionCookie);
+    
     if (!sessionCookie) {
+      console.log('[session] No session cookie found');
       return res.status(401).json({ error: 'No session cookie found.' });
     }
 
     // verifyToken from session.js
     const decoded = await verifyToken(sessionCookie); 
     // => { user: { id: ... }, expires: ... }
+    console.log('[session] Token decoded successfully, user ID:', decoded?.user?.id);
+
+    // Check if token is expired
+    if (decoded.expires && new Date() > new Date(decoded.expires)) {
+      console.log('[session] Token has expired');
+      return res.status(401).json({ error: 'Session expired.' });
+    }
 
     // If token is expired or invalid, an error is thrown
     if (!decoded?.user?.id) {
+      console.log('[session] Invalid token payload');
       return res.status(401).json({ error: 'Invalid session.' });
     }
 
@@ -282,9 +379,11 @@ router.get('/session', async (req, res) => {
     const userId = decoded.user.id;
     const [foundUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!foundUser) {
+      console.log('[session] User not found in database for ID:', userId);
       return res.status(401).json({ error: 'User not found for this session.' });
     }
 
+    console.log('[session] Session valid for user:', foundUser.email);
     return res.json({
       user: {
         id: foundUser.id,
@@ -294,9 +393,18 @@ router.get('/session', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[session] error:', error);
+    console.error('[session] Session validation error:', error.message);
     return res.status(401).json({ error: 'Invalid or expired session token.' });
   }
 });
+
+// Get authentication URL
+router.get("/youtube/auth", getAuthURL);
+
+// Handle OAuth2 callback
+router.get("/youtube/callback", handleCallback);
+
+// List authenticated channels
+router.get("/youtube/channels", listChannels);
 
 export default router;

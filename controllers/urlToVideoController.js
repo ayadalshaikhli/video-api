@@ -1,5 +1,6 @@
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
+import ffprobeStatic from "ffprobe-static";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -17,9 +18,11 @@ import { fetchVideoStylesByIds, fetchVoicesByIds } from "../data/media-styles.js
 import { generateImagePrompts } from "../actions/image-prompter.js";
 import { vttToAss, getAssStyleInfoFromCaptionId, wordsToAss } from "../utils/subtitleUtiles.js";
 import { createShortVideo, updateShortVideo } from "../actions/create-short-video.js";
+import { uploadVideo } from "./uploadYoutubeController.js";
 
 dotenv.config();
 ffmpeg.setFfmpegPath(ffmpegStatic);
+ffmpeg.setFfprobePath(ffprobeStatic.path);
 
 // This function returns default SDXL parameters if none are provided in the style record.
 function getSdxlParams(styleRecord) {
@@ -80,6 +83,8 @@ export const UrlToVideoController = async (req, res) => {
       });
     }
 
+    // Add uploadToYoutube flag automatically
+    req.body.uploadToYoutube = true;
 
     const videoData = {
       url,          // This can be null or the value sent in req.body
@@ -90,8 +95,6 @@ export const UrlToVideoController = async (req, res) => {
       projectTitle,
       userId: user.id,
     };
-
-
 
     // Create the short video record (pending)
     const shortVideo = await createShortVideo(videoData);
@@ -291,7 +294,7 @@ export const UrlToVideoController = async (req, res) => {
         .save(finalVideoPath);
     });
 
-    // Upload final video
+    // Upload final video to Cloudflare
     const videoFile = {
       buffer: fs.readFileSync(finalVideoPath),
       originalname: "output_video.mp4",
@@ -300,10 +303,49 @@ export const UrlToVideoController = async (req, res) => {
     const uploadResult = await uploadVideoFile(videoFile);
     await updateShortVideo({ id: shortVideo.id, videoUrl: uploadResult.publicUrl });
 
+    // Upload to YouTube if requested
+    let youtubeUrl = null;
+    if (req.body.uploadToYoutube) {
+      try {
+        // Create YouTube upload request object
+        const youtubeReq = {
+          file: {
+            path: finalVideoPath,
+            originalname: "output_video.mp4",
+            mimetype: "video/mp4"
+          },
+          body: {
+            title: projectTitle || "Generated Video",
+            description: finalScript || "Generated using our video generation service",
+            privacy: "private"
+          }
+        };
+
+        // Upload to YouTube using the existing upload controller
+        const youtubeResult = await uploadVideo(youtubeReq, {
+          json: (data) => data,
+          status: () => ({ json: (data) => data })
+        });
+
+        // Check if we have a video URL in the response
+        if (youtubeResult && youtubeResult.videoUrl) {
+          youtubeUrl = youtubeResult.videoUrl;
+          console.log("Successfully uploaded to YouTube:", youtubeUrl);
+        } else {
+          console.error("YouTube upload response missing URL:", youtubeResult);
+        }
+      } catch (youtubeError) {
+        console.error("YouTube upload failed:", youtubeError);
+      }
+    }
+
     return res.json({
       success: true,
       message: "Video created, uploaded, and temporary files removed successfully!",
-      data: { videoUrl: uploadResult.publicUrl },
+      data: { 
+        videoUrl: uploadResult.publicUrl,
+        youtubeUrl // Will be null if YouTube upload wasn't requested or failed
+      },
     });
   } catch (err) {
     console.error("Error in processing:", err);

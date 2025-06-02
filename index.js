@@ -28,6 +28,7 @@ import audioRoute from "./routes/app/audioRoute.js";
 import videooRoute from "./routes/app/videoRoute.js"; 
 import imageGenerationRoute from "./routes/imageGenerationRoute.js";
 import elevenLabsRoute from "./routes/elevenLabsRoute.js";
+import uploadRouteYoutube from "./routes/uploadRoute.js";
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -116,6 +117,8 @@ app.use("/api/audio-text", restrictedCors, restrictOriginMiddleware, videoToCapt
 app.use('/api/blog-automation', restrictedCors, restrictOriginMiddleware, blogAutomationRoute);
 app.use('/api/audio-transcription', restrictedCors, restrictOriginMiddleware, audioTranscriptionRoute);
 app.use("/api/video-shorts", restrictedCors, restrictOriginMiddleware, videoShortsRoute);
+app.use("/api/upload", uploadRouteYoutube);
+
 
 
 // app.use("/api/lambda-video-generation", restrictedCors, restrictOriginMiddleware, lambdaVideoGenerationRoute);
