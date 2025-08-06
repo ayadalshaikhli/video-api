@@ -7,165 +7,227 @@ import { Server as SocketIOServer } from "socket.io";
 import dotenv from "dotenv";
 dotenv.config();
 
-// Import your existing routes
-import TestRoute from "./routes/TestRoute.js";
-import videoRoutes from "./routes/videosRoute.js";
-import syncRoute from "./routes/syncRoute.js";
-import generateRouter from "./routes/generateRoute.js";
-import uploadRoute from "./routes/uploadRoute.js";
-import textToSpeechRoute from "./routes/textToSpeechRoute.js";
-import speechToTextRoute from "./routes/speechToTextRoute.js";
-import urlToVideoRoute from "./routes/urlToVideoRoute.js";
-import videoToCaptionRoute from "./routes/videoToCaptionRoute.js";
-// import lambdaVideoGenerationRoute from "./routes/lambdaVideoGenerationRoute.js";
-// import instagramRoute from "./routes/instagramRoute.js";
-// import subtitleStylesRoute from "./routes/subtitleStylesRoute.js";
-import blogAutomationRoute from './routes/blogAutomationRoute.js';
-import audioTranscriptionRoute from './routes/audioTranscriptionRoute.js';
-import videoShortsRoute from "./routes/videoShortsRoute.js";
-import authRoutes from "./routes/authRoute.js"; 
-import audioRoute from "./routes/app/audioRoute.js";
-import videooRoute from "./routes/app/videoRoute.js"; 
-import imageGenerationRoute from "./routes/imageGenerationRoute.js";
-import elevenLabsRoute from "./routes/elevenLabsRoute.js";
-import uploadRouteYoutube from "./routes/uploadRoute.js";
+// Import doctor app routes
+import authRoutes from "./routes/authRoute.js";
+import patientsRoutes from "./routes/patientsRoute.js";
+import appointmentsRoutes from "./routes/appointmentsRoute.js";
+import visitsRoutes from "./routes/visitsRoute.js";
+import medicalRoutes from "./routes/medicalRoute.js";
+import billingRoutes from "./routes/billingRoute.js";
+import documentsRoutes from "./routes/documentsRoute.js";
+import notificationsRoutes from "./routes/notificationsRoute.js";
+import settingsRoutes from "./routes/settingsRoute.js";
+import staffRoutes from "./routes/staffRoute.js";
+import dashboardRoutes from "./routes/dashboardRoute.js";
+import reportsRoutes from "./routes/reportsRoute.js";
+import analyticsRoutes from "./routes/analyticsRoute.js";
+import scheduleRoutes from "./routes/scheduleRoute.js";
+import clinicsRoutes from "./routes/clinicsRoute.js";
+import departmentsRoutes from "./routes/departmentsRoute.js";
+import auditRoutes from "./routes/auditRoute.js";
 
-// Import the new conversion router
-import convertRoute from "./routes/convertRoute.js";
+// Import authentication middleware
+import { requireAuth } from "./middleware/auth.js";
 
 const app = express();
 const server = http.createServer(app);
 
-// Allowed origins
+// Allowed origins for CORS
 const allowedOrigins = [
-    "https://www.vairality.fun",
-    "https://vairality.fun",
-    'http://localhost:3000',
-    'http://localhost:8082',
-    'http://localhost:9469',
-    'http://192.168.1.2:8082',
+    "http://localhost:3000",
+    "http://localhost:8082",
+    "http://localhost:9469",
+    "http://192.168.1.2:8082",
+    "exp://192.168.1.2:8081", // For Expo development
+    "exp://localhost:8081",
 ];
 
-// const allowedOrigins = [
-//     "https://www.vairality.fun",
-//     "https://vairality.fun",
-// ];
-
-
-const restrictOriginMiddleware = (req, res, next) => {
-    const origin = req.headers.origin;
-    console.log(`[Middleware] Incoming request from origin: ${origin}`);
-    
-    if (!origin) {
-        // Log but allow requests with no Origin header
-        console.warn("[Middleware] No origin header present. Allowing request.");
-        return next();
-    }
-
-    if (!allowedOrigins.includes(origin)) {
-        console.error(`[Middleware] Access forbidden for origin: ${origin}`);
-        return res.status(403).json({ error: "Access forbidden: Invalid origin." });
-    }
-
-    console.log(`[Middleware] Origin ${origin} is allowed.`);
-    next();
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, Postman, etc.)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
 
-
-const openCors = cors({ origin: "*" });
-const restrictedCors = cors({ origin: allowedOrigins, credentials: true });
-
-// Built-in middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Middleware
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 // Additional logging middleware
 app.use((req, res, next) => {
-    console.log(`[Request] ${req.method} ${req.originalUrl}`);
-    console.log(`  Query: ${JSON.stringify(req.query)}`);
-    console.log(`  Headers: ${JSON.stringify(req.headers)}`);
-    console.log(`  Remote Address: ${req.ip}`);
-    console.log(`  Content-Type: ${req.headers['content-type']}`);
-    console.log(`  Content-Length: ${req.headers['content-length']}`);
-    if (req.method !== "GET") {
-        console.log(`  Body: ${JSON.stringify(req.body)}`);
-        console.log(`  Body keys: ${Object.keys(req.body || {})}`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+    console.log(`  Origin: ${req.headers.origin || 'No origin'}`);
+    console.log(`  User-Agent: ${req.headers['user-agent']}`);
+    console.log(`  IP: ${req.ip}`);
+    if (req.method !== "GET" && Object.keys(req.body || {}).length > 0) {
+        console.log(`  Body keys: ${Object.keys(req.body || {}).join(', ')}`);
+    }
+    next();
+});
+
+// Security logging middleware for tracking authentication status
+app.use((req, res, next) => {
+    const isAuthRoute = req.originalUrl.startsWith('/api/auth/');
+    const isHealthCheck = req.originalUrl === '/health' || req.originalUrl === '/';
+    
+    if (!isAuthRoute && !isHealthCheck) {
+        console.log(`[Security] ${req.method} ${req.originalUrl} - Cookie present: ${!!req.cookies?.session}`);
     }
     next();
 });
 
 console.log("[Server] Registering routes...");
-app.use("/api/auth", openCors, authRoutes);
-app.use("/api/app/audio", openCors, audioRoute);
-app.use("/api/app/video", openCors, videooRoute);
-app.use("/api/app/images", openCors, imageGenerationRoute);
-app.use("/api/elevenlabs", openCors, elevenLabsRoute);
 
-app.use("/api/generate", openCors, generateRouter);
-app.use("/api/test-route", openCors, TestRoute);
-app.use("/videos", openCors, videoRoutes);
-app.use("/api/sync", restrictedCors, restrictOriginMiddleware, syncRoute);
-app.use("/api/upload", restrictedCors, restrictOriginMiddleware, uploadRoute);
-app.use("/api/text-to-speech", restrictedCors, restrictOriginMiddleware, textToSpeechRoute);
-app.use("/api/speech-to-text", restrictedCors, restrictOriginMiddleware, speechToTextRoute);
-app.use("/api/url-to-video", restrictedCors, restrictOriginMiddleware, urlToVideoRoute);
-app.use("/api/tiktok/upload", restrictedCors, restrictOriginMiddleware, uploadRoute);
-app.use("/api/tiktok/callback", openCors, syncRoute);
-app.use("/api/video-caption", restrictedCors, restrictOriginMiddleware, videoToCaptionRoute);
-app.use("/api/audio-text", restrictedCors, restrictOriginMiddleware, videoToCaptionRoute);
-app.use('/api/blog-automation', restrictedCors, restrictOriginMiddleware, blogAutomationRoute);
-app.use('/api/audio-transcription', restrictedCors, restrictOriginMiddleware, audioTranscriptionRoute);
-app.use("/api/video-shorts", restrictedCors, restrictOriginMiddleware, videoShortsRoute);
-app.use("/api/upload", uploadRouteYoutube);
+// Doctor app routes
+app.use("/api/auth", authRoutes);
+app.use("/api/patients", patientsRoutes);
+app.use("/api/appointments", appointmentsRoutes);
+app.use("/api/visits", visitsRoutes);
+app.use("/api/medical", medicalRoutes);
+app.use("/api/billing", billingRoutes);
+app.use("/api/documents", documentsRoutes);
+app.use("/api/notifications", notificationsRoutes);
+app.use("/api/settings", settingsRoutes);
+app.use("/api/staff", staffRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/reports", reportsRoutes);
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/schedule", scheduleRoutes);
+app.use("/api/clinics", clinicsRoutes);
+app.use("/api/departments", departmentsRoutes);
+app.use("/api/audit", auditRoutes);
 
-
-
-// app.use("/api/lambda-video-generation", restrictedCors, restrictOriginMiddleware, lambdaVideoGenerationRoute);
-// app.use("/api/instagram", openCors, instagramRoute);
-// app.use("/api/convert", openCors, subtitleStylesRoute);
-
-
-// New conversion route (you can decide if it should be open or restricted)
-app.use("/api/convert", openCors, convertRoute);
-
-// Error-handling middleware
-app.use((err, req, res, next) => {
-    // Handle multer file size limit error
-    if (err.code === "LIMIT_FILE_SIZE") {
-        return res.status(400).json({ error: "File size should not exceed 5MB." });
-    }
-    console.error("[Error Handler] An error occurred:");
-    console.error(`  Error: ${err.message}`);
-    console.error(`  Stack: ${err.stack}`);
-    console.error(`  Request URL: ${req.originalUrl}`);
-    res.status(500).send("Something broke!");
+// Health check endpoint
+app.get("/health", (req, res) => {
+    console.log("[Health Check] Server health check requested");
+    res.json({ 
+        status: "healthy", 
+        timestamp: new Date().toISOString(),
+        service: "Aubra Doctor App API"
+    });
 });
 
 // Base route
 app.get("/", (req, res) => {
-    console.log("[Route] GET /");
+    console.log("[Route] GET / - Base route accessed");
     console.log(`  Request from: ${req.ip}`);
-    res.send("you shell not pass");
+    res.json({ 
+        message: "Aubra Doctor App API", 
+        version: "1.0.0",
+        endpoints: {
+            auth: "/api/auth",
+            patients: "/api/patients", 
+            appointments: "/api/appointments",
+            medical: "/api/medical",
+            billing: "/api/billing",
+            documents: "/api/documents",
+            notifications: "/api/notifications",
+            settings: "/api/settings",
+            staff: "/api/staff",
+            dashboard: "/api/dashboard",
+            clinics: "/api/clinics",
+            departments: "/api/departments",
+            audit: "/api/audit"
+        }
+    });
+});
+
+// Error-handling middleware
+app.use((err, req, res, next) => {
+    console.error("[Error Handler] An error occurred:");
+    console.error(`  Error: ${err.message}`);
+    console.error(`  Stack: ${err.stack}`);
+    console.error(`  Request URL: ${req.originalUrl}`);
+    console.error(`  Request Method: ${req.method}`);
+    
+    // Handle specific error types
+    if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ error: "File size should not exceed 10MB." });
+    }
+    
+    if (err.type === 'entity.parse.failed') {
+        return res.status(400).json({ error: "Invalid JSON in request body." });
+    }
+    
+    if (err.message === 'Not allowed by CORS') {
+        return res.status(403).json({ error: "CORS policy violation." });
+    }
+    
+    res.status(500).json({ 
+        error: "Internal server error",
+        message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    });
+});
+
+// Handle 404 routes
+app.use('*', (req, res) => {
+    console.log(`[404] Route not found: ${req.method} ${req.originalUrl}`);
+    res.status(404).json({ 
+        error: "Route not found",
+        availableEndpoints: [
+            "GET /",
+            "GET /health",
+            "POST /api/auth/signin",
+            "POST /api/auth/signup", 
+            "GET /api/auth/session",
+            "GET /api/patients",
+            "GET /api/appointments",
+            "GET /api/dashboard",
+            "GET /api/medical/visits",
+            "GET /api/billing/invoices",
+            "GET /api/billing/payments",
+            "GET /api/billing/services",
+            "GET /api/reports",
+            "GET /api/analytics",
+            "GET /api/clinics",
+            "GET /api/departments",
+            "GET /api/audit/logs"
+        ]
+    });
 });
 
 console.log("[Socket.IO] Setting up Socket.IO...");
 const io = new SocketIOServer(server, {
-    cors: {
-        origin: allowedOrigins,
-        methods: ["GET", "POST"],
-        credentials: true,
-    },
+    cors: corsOptions
 });
 
 io.on("connection", (socket) => {
     console.log(`[Socket.IO] A user connected: ${socket.id}`);
+    
+    // Join clinic room for real-time updates
+    socket.on('join-clinic', (clinicId) => {
+        socket.join(`clinic-${clinicId}`);
+        console.log(`[Socket.IO] User ${socket.id} joined clinic-${clinicId}`);
+    });
+    
+    // Leave clinic room
+    socket.on('leave-clinic', (clinicId) => {
+        socket.leave(`clinic-${clinicId}`);
+        console.log(`[Socket.IO] User ${socket.id} left clinic-${clinicId}`);
+    });
+    
     socket.on("disconnect", () => {
         console.log(`[Socket.IO] User disconnected: ${socket.id}`);
     });
 });
 
+// Export io for use in controllers if needed
+export { io };
+
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-    console.log(`[Server] Server running on port ${PORT}`);
+    console.log(`[Server] Aubra Doctor App API server running on port ${PORT}`);
+    console.log(`[Server] Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`[Server] CORS origins: ${allowedOrigins.join(', ')}`);
 });

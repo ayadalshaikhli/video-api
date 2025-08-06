@@ -1,18 +1,11 @@
 // File: routes/authRoutes.js
 import express from 'express';
 import { z } from 'zod';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 // ----- Import from your existing code -----
-import { db } from '../lib/db/drizzle.js'; // or wherever your drizzle instance is
-import {
-  users,
-  teams,
-  teamMembers,
-  invitations,
-  activityLogs,
-  ActivityType
-} from '../lib/db/schema.js';
+import { db } from '../lib/db/drizzle.js';
+import { users, profiles, clinics, userRoles } from '../lib/db/schema.js';
 import {
   hashPassword,
   comparePasswords,
@@ -20,10 +13,16 @@ import {
   verifyToken,
   clearSession
 } from '../lib/auth/session.js';
-// If you have createCheckoutSession logic, import it (or remove if not needed)
-// import { createCheckoutSession } from '@/lib/payments/stripe';
-import { getUserWithTeam } from '../lib/db/queries.js'; // if you have this helper
-import { getAuthURL, handleCallback, listChannels } from "../controllers/AuthController.js";
+import { getUser } from '../lib/db/queries.js';
+import {
+    register,
+    login,
+    logout,
+    getMe,
+    updateProfile,
+    changePassword
+} from '../controllers/AuthController.js';
+import { setupDefaultClinicData } from '../lib/db/clinicSetup.js';
 // ------------------------------------------
 
 const router = express.Router();
@@ -37,22 +36,18 @@ const signInSchema = z.object({
 const signUpSchema = z.object({
   email: z.string().email('Invalid email format'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  inviteId: z.string().optional(),
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
+  phone: z.string().optional(),
+  // Clinic information
+  clinicName: z.string().min(1, 'Clinic name is required'),
+  clinicAddress: z.string().optional(),
+  clinicPhone: z.string().optional(),
+  clinicEmail: z.string().email().optional(),
+  clinicWebsite: z.string().optional(),
+  clinicDescription: z.string().optional(),
+  role: z.enum(['admin', 'doctor']).default('doctor'),
 });
-
-/** 
- * Helper to log an activity if you want the same logic 
- * from your Next.js code 
- */
-async function logActivity(teamId, userId, type, ipAddress) {
-  if (!teamId) return;
-  await db.insert(activityLogs).values({
-    teamId,
-    userId,
-    action: type,
-    ipAddress: ipAddress || ''
-  });
-}
 
 // Custom error handler
 const handleError = (error, res) => {
@@ -76,12 +71,7 @@ const handleError = (error, res) => {
 
 /** 
  * signIn
- * Replicates the logic from your Next.js `signIn` validated action:
- *  1) Find user by email
- *  2) Compare password
- *  3) setSession (writes a JWT cookie)
- *  4) logActivity
- *  5) Return { success: true, user: { ... } } or { error: "..."} 
+ * Simple authentication for medical clinic users
  */
 router.post("/signin", async (req, res) => {
   try {
@@ -127,17 +117,109 @@ router.post("/signin", async (req, res) => {
     console.log('[signin] Setting session for user:', userRecord.email);
     await setSession(res, userRecord);
     
-    console.log('[signin] Signin successful for user:', userRecord.email);
-    
-    // Return success with minimal user data
-    return res.json({
+    // 4. Get complete user data with profile and clinic (like session route does)
+    const [userWithProfile] = await db
+      .select({
+        user: users,
+        profile: profiles
+      })
+      .from(users)
+      .leftJoin(profiles, eq(users.id, profiles.id))
+      .where(eq(users.id, userRecord.id))
+      .limit(1);
+
+    // Get user's clinic and role (include both active and pending users)
+    const [userRole] = await db
+      .select({
+        role: userRoles.role,
+        status: userRoles.status,
+        isActive: userRoles.isActive,
+        clinic: clinics
+      })
+      .from(userRoles)
+      .leftJoin(clinics, eq(userRoles.clinicId, clinics.id))
+      .where(eq(userRoles.userId, userRecord.id))
+      .limit(1);
+
+    console.log('[signin] User role query result:', userRole ? 'FOUND' : 'NOT FOUND');
+    if (userRole) {
+      console.log('[signin] User role data:', {
+        role: userRole.role,
+        status: userRole.status,
+        isActive: userRole.isActive,
+        clinicId: userRole.clinic?.id
+      });
+    }
+
+    const responseData = {
       success: true,
       user: {
-        id: userRecord.id,
-        email: userRecord.email,
-        role: userRecord.role
+        id: userWithProfile.user.id,
+        email: userWithProfile.user.email,
+        firstName: userWithProfile.profile?.firstName,
+        lastName: userWithProfile.profile?.lastName,
+        phone: userWithProfile.profile?.phone,
+        status: userRole?.status || 'active'
       }
-    });
+    };
+
+    // Add clinic data if user has one
+    if (userRole?.clinic) {
+      responseData.clinic = {
+        id: userRole.clinic.id,
+        name: userRole.clinic.name,
+        address: userRole.clinic.address,
+        phone: userRole.clinic.phone,
+        email: userRole.clinic.email
+      };
+      responseData.userRole = {
+        role: userRole.role
+      };
+    }
+
+    // If no userRole found, check if this is a pending user who signed up via invitation
+    if (!userRole) {
+      console.log('[signin] No userRole found, checking if user has pending status in userRoles table');
+      
+      // Check if there's a userRole record with pending status for this user
+      const pendingUserRole = await db
+        .select({
+          role: userRoles.role,
+          status: userRoles.status,
+          isActive: userRoles.isActive,
+          clinic: clinics
+        })
+        .from(userRoles)
+        .leftJoin(clinics, eq(userRoles.clinicId, clinics.id))
+        .where(and(
+          eq(userRoles.userId, userRecord.id),
+          eq(userRoles.status, 'pending')
+        ))
+        .limit(1);
+      
+      if (pendingUserRole.length > 0) {
+        console.log('[signin] Found pending userRole:', pendingUserRole[0]);
+        responseData.user.status = 'pending';
+        
+        if (pendingUserRole[0].clinic) {
+          responseData.clinic = {
+            id: pendingUserRole[0].clinic.id,
+            name: pendingUserRole[0].clinic.name,
+            address: pendingUserRole[0].clinic.address,
+            phone: pendingUserRole[0].clinic.phone,
+            email: pendingUserRole[0].clinic.email
+          };
+          responseData.userRole = {
+            role: pendingUserRole[0].role
+          };
+        }
+      }
+    }
+
+    console.log('[signin] Signin successful for user:', userRecord.email);
+    console.log('[signin] Returning complete user data with clinic info');
+    
+    return res.json(responseData);
   } catch (error) {
     console.error('[signin] Error during signin:', error);
     return handleError(error, res);
@@ -146,24 +228,30 @@ router.post("/signin", async (req, res) => {
 
 /**
  * signUp
- * Replicates the Next.js signUp logic:
- *  1) Check if user exists
- *  2) Hash password
- *  3) Insert user
- *  4) If inviteId, link them to a team, otherwise create new team
- *  5) Insert teamMembers, log activity
- *  6) setSession
- *  7) Return JSON 
+ * Registration for medical clinic doctors/admins with clinic creation
  */
-router.post('/signup', async (req, res) => {
+router.post('/signup', async (req, res) => {    
   try {
     // Validate request body
     const validatedData = signUpSchema.parse(req.body);
-    const { email, password, inviteId } = validatedData;
+    const { 
+      email, 
+      password, 
+      firstName, 
+      lastName, 
+      phone,
+      clinicName,
+      clinicAddress,
+      clinicPhone,
+      clinicEmail,
+      clinicWebsite,
+      clinicDescription,
+      role
+    } = validatedData;
 
-    // Start a transaction
+    // Start a transaction to ensure data consistency
     const result = await db.transaction(async (trx) => {
-      // Check existing user
+      // 1. Check if user already exists
       const existingUser = await trx
         .select()
         .from(users)
@@ -174,16 +262,15 @@ router.post('/signup', async (req, res) => {
         throw new Error('USER_EXISTS');
       }
 
-      // Hash password
+      // 2. Hash password
       const passwordHash = await hashPassword(password);
 
-      // Create user
+      // 3. Create user
       const [createdUser] = await trx
         .insert(users)
         .values({
           email,
-          passwordHash,
-          role: 'owner'
+          passwordHash
         })
         .returning();
 
@@ -191,104 +278,103 @@ router.post('/signup', async (req, res) => {
         throw new Error('FAILED_TO_CREATE_USER');
       }
 
-      let teamId;
-      let userRole;
-      let createdTeam;
+      // 4. Create profile
+      const [createdProfile] = await trx
+        .insert(profiles)
+        .values({
+          id: createdUser.id,
+          email,
+          firstName,
+          lastName,
+          phone: phone || null
+        })
+        .returning();
 
-      if (inviteId) {
-        // Handle invitation logic
-        const [invitation] = await trx
-          .select()
-          .from(invitations)
-          .where(
-            and(
-              eq(invitations.id, parseInt(inviteId, 10)),
-              eq(invitations.email, email),
-              eq(invitations.status, 'pending')
-            )
-          )
-          .limit(1);
+      // 5. Create clinic
+      const [createdClinic] = await trx
+        .insert(clinics)
+        .values({
+          name: clinicName,
+          address: clinicAddress || null,
+          phone: clinicPhone || null,
+          email: clinicEmail || null,
+          website: clinicWebsite || null,
+          description: clinicDescription || null,
+          isActive: true
+        })
+        .returning();
 
-        if (!invitation) {
-          throw new Error('INVALID_INVITATION');
-        }
-
-        teamId = invitation.teamId;
-        userRole = invitation.role;
-
-        await trx
-          .update(invitations)
-          .set({ status: 'accepted' })
-          .where(eq(invitations.id, invitation.id));
-
-        [createdTeam] = await trx
-          .select()
-          .from(teams)
-          .where(eq(teams.id, teamId))
-          .limit(1);
-      } else {
-        // Create new team
-        [createdTeam] = await trx
-          .insert(teams)
-          .values({
-            name: `${email}'s Team`
-          })
-          .returning();
-
-        if (!createdTeam) {
-          throw new Error('FAILED_TO_CREATE_TEAM');
-        }
-
-        teamId = createdTeam.id;
-        userRole = 'owner';
+      if (!createdClinic) {
+        throw new Error('FAILED_TO_CREATE_CLINIC');
       }
 
-      // Create team member
-      await trx.insert(teamMembers).values({
-        userId: createdUser.id,
-        teamId: teamId,
-        role: userRole
-      });
+      // 6. Create user role (doctor/admin of the clinic)
+      await trx
+        .insert(userRoles)
+        .values({
+          userId: createdUser.id,
+          clinicId: createdClinic.id,
+          role: role,
+          isActive: true
+        });
 
-      return { createdUser, createdTeam };
+      return { 
+        user: createdUser, 
+        profile: createdProfile, 
+        clinic: createdClinic 
+      };
     });
 
     // Set session after successful transaction
-    await setSession(res, result.createdUser);
+    await setSession(res, result.user);
 
-    // Log activity outside transaction
-    await logActivity(
-      result.createdTeam.id,
-      result.createdUser.id,
-      inviteId ? ActivityType.ACCEPT_INVITATION : ActivityType.SIGN_UP,
-      req.ip
-    );
+    // Setup default clinic data (appointment types, departments, services)
+    try {
+      console.log('[signup] Setting up default clinic data for:', result.clinic.name);
+      await setupDefaultClinicData(result.clinic.id);
+      console.log('[signup] Default clinic data setup completed');
+    } catch (setupError) {
+      console.error('[signup] Error setting up default clinic data:', setupError);
+      // Don't fail the signup if clinic setup fails, just log the error
+      // The user can still use the system and create types manually
+    }
 
-    return res.json({
+    console.log('[signup] Successfully created user, profile, clinic, and role for:', email);
+
+    // Return complete user data matching signin format
+    const responseData = {
       success: true,
       user: {
-        id: result.createdUser.id,
-        email: result.createdUser.email,
-        role: result.createdUser.role
+        id: result.user.id,
+        email: result.user.email,
+        firstName: result.profile.firstName,
+        lastName: result.profile.lastName,
+        phone: result.profile.phone
       },
-      team: {
-        id: result.createdTeam.id,
-        name: result.createdTeam.name
+      clinic: {
+        id: result.clinic.id,
+        name: result.clinic.name,
+        address: result.clinic.address,
+        phone: result.clinic.phone,
+        email: result.clinic.email
+      },
+      userRole: {
+        role: role
       }
-    });
+    };
+
+    console.log('[signup] Returning complete user data with clinic info');
+    return res.json(responseData);
   } catch (error) {
     // Handle specific error cases
     if (error.message === 'USER_EXISTS') {
       return res.status(409).json({ error: 'User with this email already exists.' });
     }
-    if (error.message === 'INVALID_INVITATION') {
-      return res.status(400).json({ error: 'Invalid or expired invitation.' });
-    }
     if (error.message === 'FAILED_TO_CREATE_USER') {
       return res.status(400).json({ error: 'Failed to create user.' });
     }
-    if (error.message === 'FAILED_TO_CREATE_TEAM') {
-      return res.status(400).json({ error: 'Failed to create team.' });
+    if (error.message === 'FAILED_TO_CREATE_CLINIC') {
+      return res.status(400).json({ error: 'Failed to create clinic.' });
     }
     
     return handleError(error, res);
@@ -298,35 +384,11 @@ router.post('/signup', async (req, res) => {
 /**
  * signOut
  *  - Clear the cookie so the session is invalid
- *  - Log sign-out activity if desired
- *  - Return success
  */
 router.post('/signout', async (req, res) => {
   try {
     console.log('[signout] Processing signout request');
     
-    // If you want to log the sign-out, you need the user's ID from the cookie
-    const sessionCookie = req.cookies?.session;
-    console.log('[signout] Session cookie exists:', !!sessionCookie);
-    
-    if (sessionCookie) {
-      // decode token to get user
-      try {
-        const decoded = await verifyToken(sessionCookie);
-        const userId = decoded?.user?.id;
-        console.log('[signout] User ID from token:', userId);
-        
-        if (userId) {
-          const userWithTeam = await getUserWithTeam(userId);
-          await logActivity(userWithTeam?.teamId, userId, ActivityType.SIGN_OUT, req.ip);
-          console.log('[signout] Activity logged for user:', userId);
-        }
-      } catch (err) {
-        console.log('[signout] Token verification failed (expected if already expired):', err.message);
-        // no-op if token invalid - this is expected for expired tokens
-      }
-    }
-
     // Use the proper clearSession function to ensure cookie is cleared with matching options
     clearSession(res);
     console.log('[signout] Session cookie cleared');
@@ -348,10 +410,12 @@ router.post('/signout', async (req, res) => {
  */
 router.get('/session', async (req, res) => {
   try {
+    console.log('[session] ================================');
     console.log('[session] Checking session...');
     
     const sessionCookie = req.cookies?.session;
     console.log('[session] Session cookie exists:', !!sessionCookie);
+    console.log('[session] Session cookie length:', sessionCookie ? sessionCookie.length : 0);
     
     if (!sessionCookie) {
       console.log('[session] No session cookie found');
@@ -360,51 +424,129 @@ router.get('/session', async (req, res) => {
 
     // verifyToken from session.js
     const decoded = await verifyToken(sessionCookie); 
-    // => { user: { id: ... }, expires: ... }
-    console.log('[session] Token decoded successfully, user ID:', decoded?.user?.id);
+    console.log('[session] Token decoded successfully');
+    console.log('[session] Decoded payload:', JSON.stringify(decoded, null, 2));
+    console.log('[session] User ID from token:', decoded?.user?.id);
 
     // Check if token is expired
     if (decoded.expires && new Date() > new Date(decoded.expires)) {
-      console.log('[session] Token has expired');
+      console.log('[session] Token has expired at:', decoded.expires);
+      console.log('[session] Current time:', new Date().toISOString());
       return res.status(401).json({ error: 'Session expired.' });
     }
 
     // If token is expired or invalid, an error is thrown
     if (!decoded?.user?.id) {
-      console.log('[session] Invalid token payload');
+      console.log('[session] Invalid token payload - missing user ID');
       return res.status(401).json({ error: 'Invalid session.' });
     }
 
-    // Fetch user from DB
+    // Fetch user with profile and clinic from DB
     const userId = decoded.user.id;
-    const [foundUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    if (!foundUser) {
+    console.log('[session] Fetching user data for ID:', userId);
+    
+    // Get user with profile
+    const [userWithProfile] = await db
+      .select({
+        user: users,
+        profile: profiles
+      })
+      .from(users)
+      .leftJoin(profiles, eq(users.id, profiles.id))
+      .where(eq(users.id, userId))
+      .limit(1);
+    
+    console.log('[session] User query result:', userWithProfile ? 'FOUND' : 'NOT FOUND');
+    if (userWithProfile) {
+      console.log('[session] User data:', {
+        id: userWithProfile.user.id,
+        email: userWithProfile.user.email,
+        hasProfile: !!userWithProfile.profile
+      });
+      if (userWithProfile.profile) {
+        console.log('[session] Profile data:', {
+          firstName: userWithProfile.profile.firstName,
+          lastName: userWithProfile.profile.lastName,
+          phone: userWithProfile.profile.phone
+        });
+      }
+    }
+    
+    if (!userWithProfile) {
       console.log('[session] User not found in database for ID:', userId);
       return res.status(401).json({ error: 'User not found for this session.' });
     }
 
-    console.log('[session] Session valid for user:', foundUser.email);
-    return res.json({
-      user: {
-        id: foundUser.id,
-        email: foundUser.email,
-        role: foundUser.role,
-        // other fields if needed
+    // Get user's clinic and role
+    console.log('[session] Fetching clinic and role data...');
+    const [userRole] = await db
+      .select({
+        role: userRoles.role,
+        clinic: clinics
+      })
+      .from(userRoles)
+      .leftJoin(clinics, eq(userRoles.clinicId, clinics.id))
+      .where(and(eq(userRoles.userId, userId), eq(userRoles.isActive, true)))
+      .limit(1);
+
+    console.log('[session] User role query result:', userRole ? 'FOUND' : 'NOT FOUND');
+    if (userRole) {
+      console.log('[session] Role data:', {
+        role: userRole.role,
+        hasClinic: !!userRole.clinic
+      });
+      if (userRole.clinic) {
+        console.log('[session] Clinic data:', {
+          id: userRole.clinic.id,
+          name: userRole.clinic.name,
+          address: userRole.clinic.address
+        });
       }
-    });
+    }
+
+    console.log('[session] Session valid for user:', userWithProfile.user.email);
+    
+    const responseData = {
+      user: {
+        id: userWithProfile.user.id,
+        email: userWithProfile.user.email,
+        firstName: userWithProfile.profile?.firstName,
+        lastName: userWithProfile.profile?.lastName,
+        phone: userWithProfile.profile?.phone
+      }
+    };
+
+    // Add clinic data if user has one
+    if (userRole?.clinic) {
+      responseData.clinic = {
+        id: userRole.clinic.id,
+        name: userRole.clinic.name,
+        address: userRole.clinic.address,
+        phone: userRole.clinic.phone,
+        email: userRole.clinic.email
+      };
+      responseData.userRole = {
+        role: userRole.role
+      };
+    }
+
+    console.log('[session] Final response data:', JSON.stringify(responseData, null, 2));
+    console.log('[session] ================================');
+    
+    return res.json(responseData);
   } catch (error) {
-    console.error('[session] Session validation error:', error.message);
+    console.error('[session] Session validation error:', error);
+    console.error('[session] Error stack:', error.stack);
     return res.status(401).json({ error: 'Invalid or expired session token.' });
   }
 });
 
-// Get authentication URL
-router.get("/youtube/auth", getAuthURL);
-
-// Handle OAuth2 callback
-router.get("/youtube/callback", handleCallback);
-
-// List authenticated channels
-router.get("/youtube/channels", listChannels);
+// Authentication routes
+router.post('/register', register);
+router.post('/login', login);
+router.post('/logout', logout);
+router.get('/me', getMe);
+router.put('/profile', updateProfile);
+router.put('/change-password', changePassword);
 
 export default router;

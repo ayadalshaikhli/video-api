@@ -1,6 +1,6 @@
 {
-  "id": "85dbd4b7-a8ff-42ce-aa27-ede260ad54fe",
-  "prevId": "d7e03e80-a002-4ec3-95c0-033213507b20",
+  "id": "bd67e748-c491-4938-8290-665580c5f26b",
+  "prevId": "85dbd4b7-a8ff-42ce-aa27-ede260ad54fe",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2158,6 +2158,13 @@
           "notNull": true,
           "default": "'doctor'"
         },
+        "status": {
+          "name": "status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
         "is_active": {
           "name": "is_active",
           "type": "boolean",
@@ -2167,6 +2174,13 @@
         },
         "created_at": {
           "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,

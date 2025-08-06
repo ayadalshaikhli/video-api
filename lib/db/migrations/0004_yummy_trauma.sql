@@ -1,0 +1,2 @@
+ALTER TABLE "user_roles" ADD COLUMN "status" varchar(20) DEFAULT 'active' NOT NULL;--> statement-breakpoint
+ALTER TABLE "user_roles" ADD COLUMN "updated_at" timestamp with time zone DEFAULT now() NOT NULL;
