@@ -233,24 +233,18 @@ async function getOverviewReport(clinicId, startDate, endDate, startDateStr, end
       .from(patients)
       .where(eq(patients.clinicId, clinicId));
 
-    const allAppointmentsCheck = await db
+    const allVisitsCheck = await db
       .select({ count: count() })
-      .from(appointments)
-      .where(eq(appointments.clinicId, clinicId));
+      .from(visits)
+      .where(eq(visits.clinicId, clinicId));
 
     const allInvoicesCheck = await db
       .select({ count: count() })
       .from(invoices)
       .where(eq(invoices.clinicId, clinicId));
 
-    const allVisitsCheck = await db
-      .select({ count: count() })
-      .from(visits)
-      .where(eq(visits.clinicId, clinicId));
-
     console.log('Data Check - All Time:', {
       patients: allPatientsCheck[0]?.count || 0,
-      appointments: allAppointmentsCheck[0]?.count || 0,
       invoices: allInvoicesCheck[0]?.count || 0,
       visits: allVisitsCheck[0]?.count || 0
     });
@@ -689,7 +683,21 @@ async function getVisitsReport(clinicId, startDate, endDate) {
       .where(
         and(
           eq(visits.clinicId, clinicId),
+          eq(visits.origin, 'scheduled'),
           eq(visits.status, 'scheduled'),
+          gte(visits.visitDate, startDate),
+          lte(visits.visitDate, endDate)
+        )
+      );
+
+    // Get walk-in visits
+    const walkInResult = await db
+      .select({ count: count() })
+      .from(visits)
+      .where(
+        and(
+          eq(visits.clinicId, clinicId),
+          eq(visits.origin, 'walk_in'),
           gte(visits.visitDate, startDate),
           lte(visits.visitDate, endDate)
         )
@@ -743,6 +751,7 @@ async function getVisitsReport(clinicId, startDate, endDate) {
 
     return {
       scheduled: scheduledResult[0]?.count || 0,
+      walkIn: walkInResult[0]?.count || 0,
       completed: completedResult[0]?.count || 0,
       cancelled: cancelledResult[0]?.count || 0,
       noShows: noShowResult[0]?.count || 0,
@@ -758,6 +767,7 @@ async function getVisitsReport(clinicId, startDate, endDate) {
     console.error('Error getting visits report:', error);
     return {
       scheduled: 0,
+      walkIn: 0,
       completed: 0,
       cancelled: 0,
       noShows: 0,
@@ -914,6 +924,7 @@ function generateCSV(data, type, range, startDate, endDate) {
       
     case 'visits':
       csvContent += `Scheduled Visits,${data.scheduled}\n`;
+      csvContent += `Walk-In Visits,${data.walkIn}\n`;
       csvContent += `Completed Visits,${data.completed}\n`;
       csvContent += `Cancelled Visits,${data.cancelled}\n`;
       csvContent += `No Shows,${data.noShows}\n`;

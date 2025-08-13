@@ -8,6 +8,11 @@ import {
     deletePatient,
     searchPatients
 } from '../controllers/PatientsController.js';
+import {
+    getPatientAnalytics,
+    getPatientDemographics,
+    getTopPatients
+} from '../controllers/EnhancedPatientsController.js';
 
 const router = express.Router();
 
@@ -18,5 +23,10 @@ router.get('/:id', requireAuth, getPatient);                  // Get specific pa
 router.post('/', requireAuth, createPatient);                 // Create patient in user's clinic
 router.put('/:id', requireAuth, updatePatient);               // Update patient (if owned by user's clinic)
 router.delete('/:id', requireAuth, deletePatient);            // Delete patient (if owned by user's clinic)
+
+// Enhanced patient analytics routes
+router.get('/analytics', requireAuth, getPatientAnalytics);
+router.get('/demographics', requireAuth, getPatientDemographics);
+router.get('/top', requireAuth, getTopPatients);
 
 export default router; 

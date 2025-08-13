@@ -25,6 +25,7 @@ import scheduleRoutes from "./routes/scheduleRoute.js";
 import clinicsRoutes from "./routes/clinicsRoute.js";
 import departmentsRoutes from "./routes/departmentsRoute.js";
 import auditRoutes from "./routes/auditRoute.js";
+import advancedReportsRoutes from "./routes/advancedReportsRoute.js";
 
 // Import authentication middleware
 import { requireAuth } from "./middleware/auth.js";
@@ -107,6 +108,7 @@ app.use("/api/schedule", scheduleRoutes);
 app.use("/api/clinics", clinicsRoutes);
 app.use("/api/departments", departmentsRoutes);
 app.use("/api/audit", auditRoutes);
+app.use("/api/advanced-reports", advancedReportsRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
