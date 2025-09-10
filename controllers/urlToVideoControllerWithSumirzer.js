@@ -1,5 +1,6 @@
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
+import ffprobeStatic from "ffprobe-static";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -20,6 +21,7 @@ import { vttToAss, getAssStyleInfoFromCaptionId } from "../utils/subtitleUtiles.
 
 dotenv.config();
 ffmpeg.setFfmpegPath(ffmpegStatic);
+ffmpeg.setFfprobePath(ffprobeStatic.path);
 
 // This function returns default SDXL parameters if none are provided in the style record.
 function getSdxlParams(styleRecord) {

@@ -4,10 +4,14 @@ import { fileURLToPath } from "url";
 import { dirname } from "path";
 import dotenv from "dotenv";
 import ffmpeg from "fluent-ffmpeg";
+import ffmpegStatic from "ffmpeg-static";
+import ffprobeStatic from "ffprobe-static";
 import { whisperAudio } from "../actions/whisper.js";
 import { geminiSummarize } from "../actions/gemini-summarize.js";
 
 dotenv.config();
+ffmpeg.setFfmpegPath(ffmpegStatic);
+ffmpeg.setFfprobePath(ffprobeStatic.path);
 
 function createJobTempDir() {
   const __filename = fileURLToPath(import.meta.url);

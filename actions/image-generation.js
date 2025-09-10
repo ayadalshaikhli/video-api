@@ -25,6 +25,21 @@ function getEndpoint(model) {
   if (model === "stable-diffusion-xl-base-1.0") {
     return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/stabilityai/stable-diffusion-xl-base-1.0`;
   }
+  if (model === "stable-diffusion-xl-lightning") {
+    return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/bytedance/stable-diffusion-xl-lightning`;
+  }
+  if (model === "dreamshaper-8-lcm") {
+    return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/lykon/dreamshaper-8-lcm`;
+  }
+  if (model === "leonardo-lucid-origin") {
+    return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/leonardo/lucid-origin`;
+  }
+  if (model === "leonardo-phoenix-1.0") {
+    return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/leonardo/phoenix-1.0`;
+  }
+  if (model === "flux-dev") {
+    return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-dev`;
+  }
   return `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`;
 }
 
@@ -145,11 +160,46 @@ export async function generateImageFromPrompt(prompt, videoStylePrompt = null, m
       negative_prompt: sdxlParams.negative_prompt || ""
     };
     if (model === "stable-diffusion-xl-base-1.0") {
-      payload.height = sdxlParams.height || 512;
-      payload.width = sdxlParams.width || 512;
+      payload.height = sdxlParams.height || 1024;
+      payload.width = sdxlParams.width || 1024;
       payload.num_steps = sdxlParams.num_steps || 20;
       payload.guidance = sdxlParams.guidance || 7.5;
-      payload.seed = sdxlParams.seed || 12345;
+      payload.seed = sdxlParams.seed || Math.floor(Math.random() * 1000000);
+      payload.negative_prompt = sdxlParams.negative_prompt || "deformed, ugly, disfigured, low quality, blurry, watermark, text, writing";
+    } else if (model === "stable-diffusion-xl-lightning") {
+      payload.height = sdxlParams.height || 1024;
+      payload.width = sdxlParams.width || 1024;
+      payload.num_steps = sdxlParams.num_steps || 20;
+      payload.guidance = sdxlParams.guidance || 7.5;
+      payload.seed = sdxlParams.seed || Math.floor(Math.random() * 1000000);
+      payload.negative_prompt = sdxlParams.negative_prompt || "deformed, ugly, disfigured, low quality, blurry, watermark, text, writing";
+    } else if (model === "dreamshaper-8-lcm") {
+      payload.height = sdxlParams.height || 1024;
+      payload.width = sdxlParams.width || 1024;
+      payload.num_steps = sdxlParams.num_steps || 20;
+      payload.guidance = sdxlParams.guidance || 7.5;
+      payload.seed = sdxlParams.seed || Math.floor(Math.random() * 1000000);
+      payload.negative_prompt = sdxlParams.negative_prompt || "deformed, ugly, disfigured, low quality, blurry, watermark, text, writing, cartoon, anime";
+    } else if (model === "leonardo-lucid-origin") {
+      payload.width = sdxlParams.width || 1120;
+      payload.height = sdxlParams.height || 1120;
+      payload.num_steps = sdxlParams.num_steps || 40;
+      payload.guidance = sdxlParams.guidance || 4.5;
+      payload.seed = sdxlParams.seed || Math.floor(Math.random() * 1000000);
+      payload.negative_prompt = sdxlParams.negative_prompt || "deformed, ugly, disfigured, low quality, blurry, watermark, text, writing";
+    } else if (model === "leonardo-phoenix-1.0") {
+      payload.width = sdxlParams.width || 1024;
+      payload.height = sdxlParams.height || 1024;
+      payload.num_steps = sdxlParams.num_steps || 50;
+      payload.guidance = sdxlParams.guidance || 2;
+      payload.seed = sdxlParams.seed || Math.floor(Math.random() * 1000000);
+      payload.negative_prompt = sdxlParams.negative_prompt || "deformed, ugly, disfigured, low quality, blurry, watermark, text, writing";
+    } else if (model === "flux-dev") {
+      payload.width = sdxlParams.width || 512;
+      payload.height = sdxlParams.height || 512;
+      payload.num_steps = sdxlParams.num_steps || 8;
+      payload.guidance = sdxlParams.guidance || 3.5;
+      payload.seed = sdxlParams.seed || Math.floor(Math.random() * 1000000);
     }
     // Log the payload sent to the API
     console.log("[generateImageFromPrompt] Payload for API:", JSON.stringify(payload));
@@ -160,22 +210,34 @@ export async function generateImageFromPrompt(prompt, videoStylePrompt = null, m
     console.log("[generateImageFromPrompt] API Key available:", apiKey ? `Yes (starts with ${apiKey.substring(0, 3)}...)` : "No");
     console.log("[generateImageFromPrompt] Account ID available:", process.env.CLOUDFLARE_ACCOUNT_ID ? "Yes" : "No");
 
-    try {
-      const response = await fetchImageWithRetry(payload, model, 3, 1000);
-      console.log("[generateImageFromPrompt] API response received");
-      
-      let imageBuffer;
-      if (model === "stable-diffusion-xl-base-1.0") {
-        console.log("[generateImageFromPrompt] Processing SDXL response");
-        imageBuffer = Buffer.from(response.data);
-      } else {
-        console.log("[generateImageFromPrompt] Processing Flux response");
-        if (!(response.data && response.data.result && response.data.result.image)) {
-          console.error("[generateImageFromPrompt] Invalid response structure:", JSON.stringify(response.data));
-          throw new Error("No image data received.");
+      try {
+        // SDXL models and DreamShaper 8 LCM need arraybuffer response type for binary PNG data
+        // Leonardo models and Flux models return JSON with base64 data
+        const binaryModels = ["stable-diffusion-xl-base-1.0", "stable-diffusion-xl-lightning", "dreamshaper-8-lcm"];
+        const leonardoModels = ["leonardo-lucid-origin", "leonardo-phoenix-1.0"];
+        const axiosConfig = binaryModels.includes(model) ? { responseType: 'arraybuffer' } : {};
+        const response = await fetchImageWithRetry(payload, model, 3, 1000, axiosConfig);
+        console.log("[generateImageFromPrompt] API response received");
+        
+        let imageBuffer;
+        if (binaryModels.includes(model)) {
+          console.log("[generateImageFromPrompt] Processing binary response (SDXL/DreamShaper)");
+          imageBuffer = Buffer.from(response.data);
+        } else if (leonardoModels.includes(model)) {
+          console.log("[generateImageFromPrompt] Processing Leonardo JSON response");
+          if (!(response.data && response.data.result && response.data.result.image)) {
+            console.error("[generateImageFromPrompt] Invalid Leonardo response structure:", JSON.stringify(response.data));
+            throw new Error("No image data received from Leonardo API.");
+          }
+          imageBuffer = Buffer.from(response.data.result.image, "base64");
+        } else {
+          console.log("[generateImageFromPrompt] Processing Flux response");
+          if (!(response.data && response.data.result && response.data.result.image)) {
+            console.error("[generateImageFromPrompt] Invalid response structure:", JSON.stringify(response.data));
+            throw new Error("No image data received.");
+          }
+          imageBuffer = Buffer.from(response.data.result.image, "base64");
         }
-        imageBuffer = Buffer.from(response.data.result.image, "base64");
-      }
       console.log("[generateImageFromPrompt] Image buffer created. Size:", imageBuffer.length);
 
       const __filename = fileURLToPath(import.meta.url);
@@ -184,15 +246,22 @@ export async function generateImageFromPrompt(prompt, videoStylePrompt = null, m
       const folderPath = path.join(tempDir, "generated_images");
 
       console.log("[generateImageFromPrompt] Creating directory (if needed):", folderPath);
-      mkdirSync(folderPath, { recursive: true });
-      const randomFileName = crypto.randomBytes(15).toString("hex");
-      const filePath = path.join(folderPath, `${randomFileName}.jpg`);
-      console.log("[generateImageFromPrompt] Will save image to:", filePath);
+        mkdirSync(folderPath, { recursive: true });
+        const randomFileName = crypto.randomBytes(15).toString("hex");
+        // SDXL models and DreamShaper 8 LCM return PNG format, Leonardo and Flux models return JPG
+        const pngModels = ["stable-diffusion-xl-base-1.0", "stable-diffusion-xl-lightning", "dreamshaper-8-lcm"];
+        const extension = pngModels.includes(model) ? ".png" : ".jpg";
+        const filePath = path.join(folderPath, `${randomFileName}${extension}`);
+        console.log("[generateImageFromPrompt] Will save image to:", filePath);
 
       writeFileSync(filePath, imageBuffer);
       console.log("[generateImageFromPrompt] Image saved successfully");
 
-      return { image: filePath };
+      return {
+        success: true,
+        filePath: filePath,
+        buffer: imageBuffer
+      };
     } catch (apiError) {
       console.error("[generateImageFromPrompt] API call error:", apiError);
       throw new Error("API call failed: " + apiError.message);

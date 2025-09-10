@@ -1,5 +1,6 @@
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
+import ffprobeStatic from "ffprobe-static";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -20,6 +21,7 @@ import { createShortVideo, updateShortVideo } from "../actions/create-short-vide
 
 dotenv.config();
 ffmpeg.setFfmpegPath(ffmpegStatic);
+ffmpeg.setFfprobePath(ffprobeStatic.path);
 
 // This function returns default SDXL parameters if none are provided in the style record.
 function getSdxlParams(styleRecord) {
@@ -72,7 +74,7 @@ export const UrlToVideoController = async (req, res) => {
 
   try {
     const user = await getUserFromSession(req);
-    const { url, text, projectTitle, captionId, videoStyleId, voiceId } = req.body;
+    const { url, text, projectTitle, captionId, videoStyleId, voiceId, imageGenerator } = req.body;
     if (!url && !text) {
       return res.status(400).json({
         success: false,
@@ -195,7 +197,7 @@ export const UrlToVideoController = async (req, res) => {
     const sdxlParams = videoStyleRecord
       ? getSdxlParams(videoStyleRecord)
       : {
-        model: "flux-1-schnell",
+        model: imageGenerator || "flux-1-schnell",
         negative_prompt: "",
         height: 512,
         width: 512,
@@ -203,6 +205,11 @@ export const UrlToVideoController = async (req, res) => {
         guidance: 7.5,
         seed: 0,
       };
+    
+    // Override the model with the selected image generator if provided
+    if (imageGenerator) {
+      sdxlParams.model = imageGenerator;
+    }
 
     // Generate image prompts via LLM
     const imagePrompts = await generateImagePrompts(
@@ -221,7 +228,7 @@ export const UrlToVideoController = async (req, res) => {
         sdxlParams.model,
         sdxlParams
       );
-      imagePaths.push(imgRes.image);
+      imagePaths.push(imgRes.filePath);
     }
     console.log("Total images generated:", imagePaths.length);
 

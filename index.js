@@ -28,6 +28,7 @@ import audioRoute from "./routes/app/audioRoute.js";
 import videooRoute from "./routes/app/videoRoute.js"; 
 import imageGenerationRoute from "./routes/imageGenerationRoute.js";
 import elevenLabsRoute from "./routes/elevenLabsRoute.js";
+import textToImageRoute from "./routes/textToImageRoute.js";
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -100,6 +101,7 @@ app.use("/api/app/audio", openCors, audioRoute);
 app.use("/api/app/video", openCors, videooRoute);
 app.use("/api/app/images", openCors, imageGenerationRoute);
 app.use("/api/elevenlabs", openCors, elevenLabsRoute);
+app.use("/api/text-to-image", restrictedCors, restrictOriginMiddleware, textToImageRoute);
 
 app.use("/api/generate", openCors, generateRouter);
 app.use("/api/test-route", openCors, TestRoute);
