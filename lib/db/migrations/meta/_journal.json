@@ -29,6 +29,13 @@
       "when": 1740290412111,
       "tag": "0003_pretty_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1757751302968,
+      "tag": "0004_abnormal_slayback",
+      "breakpoints": true
     }
   ]
 }

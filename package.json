@@ -19,9 +19,14 @@
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.749.0",
+    "@aws-sdk/s3-request-presigner": "^3.888.0",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@google/generative-ai": "^0.22.0",
+    "@remotion/bundler": "4.0.347",
+    "@remotion/captions": "4.0.347",
+    "@remotion/player": "4.0.347",
+    "@remotion/renderer": "4.0.347",
     "axios": "^1.7.9",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
@@ -49,8 +54,14 @@
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "puppeteer-real-browser": "^1.4.0",
+    "remotion": "^4.0.347",
     "slugify": "^1.6.6",
     "socket.io": "^4.7.5",
-    "ws": "^8.18.0"
+    "uuid": "^13.0.0",
+    "ws": "^8.18.0",
+    "youtube-transcript": "^1.2.1",
+    "youtube-transcript-api": "^3.0.6",
+    "youtube-transcript-plus": "^1.1.1",
+    "zod": "^4.1.8"
   }
 }

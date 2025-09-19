@@ -39,10 +39,31 @@ export async function generateSpeechController(req, res, next) {
         const user = await getUserFromRequest(req);
         console.log("[generateSpeechController] User extracted:", user);
 
-        const { prompt, voiceId, languageIsoCode } = req.body;
+        const { 
+            prompt, 
+            voiceId, 
+            languageIsoCode,
+            // Advanced Zyphra options
+            speakingRate = 15,
+            ttsModel = 'zonos-v0.1-transformer',
+            audioFormat = 'audio/mp3',
+            emotionSettings = {},
+            pitchStd = 45.0,
+            vqscore = 0.7,
+            speakerNoised = false
+        } = req.body;
         console.log("[generateSpeechController] prompt:", prompt);
         console.log("[generateSpeechController] voiceId:", voiceId);
         console.log("[generateSpeechController] languageIsoCode:", languageIsoCode);
+        console.log("[generateSpeechController] Advanced options:", {
+            speakingRate,
+            ttsModel,
+            audioFormat,
+            emotionSettings,
+            pitchStd,
+            vqscore,
+            speakerNoised
+        });
 
         // If a file was uploaded (e.g. from mic recording), it is available as req.file
         const clonedVoiceFile = req.file;
@@ -58,6 +79,14 @@ export async function generateSpeechController(req, res, next) {
             clonedVoiceFile,
             languageIsoCode,
             userOverride: user,
+            // Advanced Zyphra options
+            speakingRate,
+            ttsModel,
+            audioFormat,
+            emotionSettings,
+            pitchStd,
+            vqscore,
+            speakerNoised
         });
         console.log("[generateSpeechController] Generation result:", result);
         res.json(result);

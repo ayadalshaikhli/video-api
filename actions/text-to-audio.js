@@ -47,6 +47,10 @@ export async function generateSpeechAndSave({
     clonedVoiceFile, // expected from multer (if provided)
     languageIsoCode,
     userOverride, // optional: provided by the controller
+    // Advanced Zyphra options (model/format fixed internally)
+    speakingRate = 15,
+    emotionSettings = {},
+    pitchStd = 45.0
 }) {
 
     console.log("Generating speech and saving...");
@@ -106,16 +110,22 @@ export async function generateSpeechAndSave({
 
     const requestBody = {
         text: prompt,
-        speaking_rate: 15,
-        mime_type: "audio/mp3",
+        speaking_rate: speakingRate,
+        mime_type: 'audio/mpeg',
         language_iso_code: languageIsoCode,
+        model: 'zonos-v0.1-transformer',
         ...(speakerAudioBase64 && { speaker_audio: speakerAudioBase64 }),
     };
+
+    // Add model-specific parameters
+    // Keep payload minimal to match Zyphra schema — no emotion or pitchStd
+
+    console.log("Zyphra API request body:", JSON.stringify(requestBody, null, 2));
 
     try {
         console.log("Sending request to Zyphra API...");
         // Retry the API call if necessary
-        const response = await autoRetryFetch(
+        let response = await autoRetryFetch(
             "http://api.zyphra.com/v1/audio/text-to-speech",
             {
                 method: "POST",
@@ -127,11 +137,37 @@ export async function generateSpeechAndSave({
             }
         );
 
-        console.log("Received response from Zyphra API");
+        if (!response.ok && response.status === 422) {
+            try {
+                const body = await response.text();
+                console.warn('Zyphra 422 body:', body?.slice(0, 500));
+            } catch {}
+            const minimalBody = {
+                text: prompt,
+                speaking_rate: speakingRate,
+                language_iso_code: languageIsoCode,
+                model: 'zonos-v0.1-transformer',
+                mime_type: 'audio/mpeg'
+            };
+            response = await autoRetryFetch(
+                "http://api.zyphra.com/v1/audio/text-to-speech",
+                {
+                    method: "POST",
+                    headers: {
+                        "X-API-Key": process.env.ZYPHRA_API_KEY || "",
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(minimalBody),
+                }
+            );
+        }
 
         if (!response.ok) {
-            console.error("API request failed with status:", response.status);
-            throw new Error(`API request failed with status ${response.status}`);
+            const status = response.status;
+            let body = '';
+            try { body = await response.text(); } catch {}
+            console.error("API request failed", status, body?.slice(0, 500));
+            throw new Error(`API request failed with status ${status}`);
         }
 
         const arrayBuffer = await response.arrayBuffer();
@@ -140,10 +176,11 @@ export async function generateSpeechAndSave({
         const audioBuffer = Buffer.from(arrayBuffer);
         console.log("Audio buffer created.");
 
-        // Adjust your uploadAudioFile() so that it accepts a Buffer, filename, and mime type.
+        // Upload as MP3
         console.log("Uploading audio file...");
-        const uploadAudioResult = await autoRetryUpload(uploadAudioFile, audioBuffer, "audio.mp3", "audio/mp3");
-        console.log("Audio file uploaded successfully:", uploadAudioResult.publicUrl);
+        const uploadAudioResult = await autoRetryUpload(uploadAudioFile, audioBuffer, 'audio.mp3', 'audio/mp3');
+        const audioPublicUrl = uploadAudioResult.publicUrl || uploadAudioResult;
+        console.log("Audio file uploaded successfully:", audioPublicUrl);
 
         // Save the generated audio URL to the database
         const [record] = await db
@@ -152,7 +189,7 @@ export async function generateSpeechAndSave({
                 userId: user.id,
                 voiceId: voiceId === "default" ? null : voiceId,
                 prompt,
-                audioUrl: uploadAudioResult.publicUrl,
+                audioUrl: audioPublicUrl,
             })
             .returning();
 

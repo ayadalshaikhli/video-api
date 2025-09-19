@@ -29,6 +29,9 @@ import videooRoute from "./routes/app/videoRoute.js";
 import imageGenerationRoute from "./routes/imageGenerationRoute.js";
 import elevenLabsRoute from "./routes/elevenLabsRoute.js";
 import textToImageRoute from "./routes/textToImageRoute.js";
+import videoCompositionRoute from "./routes/videoCompositionRoute.js";
+import youtubeTranscriptRoute from "./routes/youtubeTranscriptRoute.js";
+import scriptWriterRoute from "./routes/script-writer.js";
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -118,6 +121,9 @@ app.use("/api/audio-text", restrictedCors, restrictOriginMiddleware, videoToCapt
 app.use('/api/blog-automation', restrictedCors, restrictOriginMiddleware, blogAutomationRoute);
 app.use('/api/audio-transcription', restrictedCors, restrictOriginMiddleware, audioTranscriptionRoute);
 app.use("/api/video-shorts", restrictedCors, restrictOriginMiddleware, videoShortsRoute);
+app.use("/api/video", restrictedCors, restrictOriginMiddleware, videoCompositionRoute);
+app.use("/api/youtube-transcript", restrictedCors, restrictOriginMiddleware, youtubeTranscriptRoute);
+app.use("/api/script-writer", restrictedCors, restrictOriginMiddleware, scriptWriterRoute);
 
 
 // app.use("/api/lambda-video-generation", restrictedCors, restrictOriginMiddleware, lambdaVideoGenerationRoute);
@@ -156,6 +162,9 @@ const io = new SocketIOServer(server, {
         credentials: true,
     },
 });
+
+// Make io instance available to routes
+app.locals.io = io;
 
 io.on("connection", (socket) => {
     console.log(`[Socket.IO] A user connected: ${socket.id}`);
