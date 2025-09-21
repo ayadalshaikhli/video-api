@@ -5,36 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1732592720431,
-      "tag": "0000_sparkling_newton_destine",
+      "when": 1758405464858,
+      "tag": "0000_sticky_omega_sentinel",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1739658927567,
-      "tag": "0001_common_silverclaw",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1740031672153,
-      "tag": "0002_tiresome_kitty_pryde",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1740290412111,
-      "tag": "0003_pretty_dragon_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1757751302968,
-      "tag": "0004_abnormal_slayback",
+      "when": 1758417714505,
+      "tag": "0001_fluffy_paper_doll",
       "breakpoints": true
     }
   ]

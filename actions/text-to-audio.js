@@ -108,8 +108,19 @@ export async function generateSpeechAndSave({
         }
     }
 
+    // Clean the text for TTS processing
+    const cleanedPrompt = prompt
+        .replace(/\*([^*]+)\*/g, '$1') // Remove markdown bold formatting
+        .replace(/…/g, '...') // Replace ellipsis with three dots
+        .replace(/[^\w\s.,!?;:'"-]/g, '') // Remove special characters that might cause issues
+        .trim();
+
+    console.log("Original text length:", prompt.length);
+    console.log("Cleaned text length:", cleanedPrompt.length);
+    console.log("Text cleaning applied:", prompt !== cleanedPrompt);
+
     const requestBody = {
-        text: prompt,
+        text: cleanedPrompt,
         speaking_rate: speakingRate,
         mime_type: 'audio/mpeg',
         language_iso_code: languageIsoCode,
@@ -121,6 +132,8 @@ export async function generateSpeechAndSave({
     // Keep payload minimal to match Zyphra schema — no emotion or pitchStd
 
     console.log("Zyphra API request body:", JSON.stringify(requestBody, null, 2));
+    console.log("Text length:", prompt.length, "characters");
+    console.log("Text preview:", prompt.substring(0, 100) + "...");
 
     try {
         console.log("Sending request to Zyphra API...");
@@ -172,6 +185,8 @@ export async function generateSpeechAndSave({
 
         const arrayBuffer = await response.arrayBuffer();
         console.log("Response body received and converted to array buffer.");
+        console.log("Audio buffer size:", arrayBuffer.byteLength, "bytes");
+        console.log("Response headers:", Object.fromEntries(response.headers.entries()));
 
         const audioBuffer = Buffer.from(arrayBuffer);
         console.log("Audio buffer created.");
@@ -195,7 +210,12 @@ export async function generateSpeechAndSave({
 
         console.log("Speech generation and saving successful. Database record created:", record);
 
-        return record;
+        // Return both the record and the audio buffer for direct use
+        return {
+            ...record,
+            audioBuffer: audioBuffer.toString('base64'),
+            audioMimeType: 'audio/mp3'
+        };
 
     } catch (error) {
         console.error("Error during speech generation and saving:", error);

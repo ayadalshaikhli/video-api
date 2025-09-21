@@ -1,0 +1,1 @@
+ALTER TABLE "captions" ADD COLUMN "segment_id" varchar(255);

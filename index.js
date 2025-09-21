@@ -10,7 +10,7 @@ dotenv.config();
 // Import your existing routes
 import TestRoute from "./routes/TestRoute.js";
 import videoRoutes from "./routes/videosRoute.js";
-import syncRoute from "./routes/syncRoute.js";
+// import syncRoute from "./routes/syncRoute.js";
 import generateRouter from "./routes/generateRoute.js";
 import uploadRoute from "./routes/uploadRoute.js";
 import textToSpeechRoute from "./routes/textToSpeechRoute.js";
@@ -32,6 +32,7 @@ import textToImageRoute from "./routes/textToImageRoute.js";
 import videoCompositionRoute from "./routes/videoCompositionRoute.js";
 import youtubeTranscriptRoute from "./routes/youtubeTranscriptRoute.js";
 import scriptWriterRoute from "./routes/script-writer.js";
+import captionMatchRoute from "./routes/captionMatchRoute.js";
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -109,13 +110,13 @@ app.use("/api/text-to-image", restrictedCors, restrictOriginMiddleware, textToIm
 app.use("/api/generate", openCors, generateRouter);
 app.use("/api/test-route", openCors, TestRoute);
 app.use("/videos", openCors, videoRoutes);
-app.use("/api/sync", restrictedCors, restrictOriginMiddleware, syncRoute);
+// app.use("/api/sync", restrictedCors, restrictOriginMiddleware, syncRoute);
 app.use("/api/upload", restrictedCors, restrictOriginMiddleware, uploadRoute);
 app.use("/api/text-to-speech", restrictedCors, restrictOriginMiddleware, textToSpeechRoute);
 app.use("/api/speech-to-text", restrictedCors, restrictOriginMiddleware, speechToTextRoute);
 app.use("/api/url-to-video", restrictedCors, restrictOriginMiddleware, urlToVideoRoute);
 app.use("/api/tiktok/upload", restrictedCors, restrictOriginMiddleware, uploadRoute);
-app.use("/api/tiktok/callback", openCors, syncRoute);
+// app.use("/api/tiktok/callback", openCors, syncRoute);
 app.use("/api/video-caption", restrictedCors, restrictOriginMiddleware, videoToCaptionRoute);
 app.use("/api/audio-text", restrictedCors, restrictOriginMiddleware, videoToCaptionRoute);
 app.use('/api/blog-automation', restrictedCors, restrictOriginMiddleware, blogAutomationRoute);
@@ -124,6 +125,7 @@ app.use("/api/video-shorts", restrictedCors, restrictOriginMiddleware, videoShor
 app.use("/api/video", restrictedCors, restrictOriginMiddleware, videoCompositionRoute);
 app.use("/api/youtube-transcript", restrictedCors, restrictOriginMiddleware, youtubeTranscriptRoute);
 app.use("/api/script-writer", restrictedCors, restrictOriginMiddleware, scriptWriterRoute);
+app.use("/api/caption-match", restrictedCors, restrictOriginMiddleware, captionMatchRoute);
 
 
 // app.use("/api/lambda-video-generation", restrictedCors, restrictOriginMiddleware, lambdaVideoGenerationRoute);

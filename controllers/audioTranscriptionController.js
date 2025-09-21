@@ -89,10 +89,18 @@ export const AudioTranscriptionController = async (req, res) => {
     if (!summaryResult.success) {
       return res.status(500).json({ success: false, message: "Summarization failed.", error: summaryResult.error });
     }
+    // Calculate actual duration from the last word's end time
+    const actualDuration = combinedWords.length > 0 
+      ? Math.max(...combinedWords.map(word => word.end || 0))
+      : transcriptionResults.reduce((total, result) => total + (result.duration || 0), 0);
+
     return res.json({
       success: true,
       summary: summaryResult.summary,
-      message: "Transcription and summarization completed successfully."
+      message: "Transcription and summarization completed successfully.",
+      text: combinedTranscription,
+      words: combinedWords,
+      duration: actualDuration
     });
   } catch (err) {
     console.error("Error in AudioTranscriptionController:", err);

@@ -83,19 +83,25 @@ export const createTikTokCaptions = (text, startMs, endMs, options = {}) => {
 };
 
 /**
- * Generate captions from text with automatic timing
+ * Generate captions from text with automatic timing based on actual audio duration
  */
 export const generateCaptionsFromText = (text, totalDurationMs, options = {}) => {
     const {
         sentencesPerCaption = 1,
-        pauseBetweenSentences = 500,
+        pauseBetweenSentences = 200,
         minCaptionDuration = 1000,
         maxCaptionDuration = 3000
     } = options;
 
     // Split text into sentences
     const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    if (sentences.length === 0) return [];
+    
     const captions = [];
+    
+    // Calculate timing to fit within total duration
+    const totalAvailableTime = totalDurationMs - (sentences.length - 1) * pauseBetweenSentences;
+    const baseTimePerSentence = totalAvailableTime / sentences.length;
     
     let currentTime = 0;
     
@@ -103,20 +109,25 @@ export const generateCaptionsFromText = (text, totalDurationMs, options = {}) =>
         const captionSentences = sentences.slice(i, i + sentencesPerCaption);
         const captionText = captionSentences.join('. ').trim();
         
-        // Calculate duration based on text length
+        // Calculate duration based on text length and available time
         const textLength = captionText.length;
-        const baseDuration = Math.max(minCaptionDuration, textLength * 50); // 50ms per character
-        const duration = Math.min(maxCaptionDuration, baseDuration);
+        const relativeDuration = Math.max(minCaptionDuration, Math.min(maxCaptionDuration, baseTimePerSentence * captionSentences.length));
         
-        captions.push({
-            text: captionText,
-            startMs: currentTime,
-            endMs: currentTime + duration,
-            timestampMs: currentTime,
-            confidence: 0.95
-        });
+        // Ensure we don't exceed total duration
+        const remainingTime = totalDurationMs - currentTime;
+        const duration = Math.min(relativeDuration, remainingTime - pauseBetweenSentences);
         
-        currentTime += duration + pauseBetweenSentences;
+        if (duration > 0) {
+            captions.push({
+                text: captionText,
+                startMs: Math.round(currentTime),
+                endMs: Math.round(currentTime + duration),
+                timestampMs: Math.round(currentTime),
+                confidence: 0.95
+            });
+            
+            currentTime += duration + pauseBetweenSentences;
+        }
     }
     
     return captions;

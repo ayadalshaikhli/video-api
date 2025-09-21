@@ -50,6 +50,7 @@
     "music-metadata": "^10.8.3",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
+    "node-ffprobe": "^3.0.0",
     "postgres": "^3.4.5",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
