@@ -33,6 +33,7 @@ import videoCompositionRoute from "./routes/videoCompositionRoute.js";
 import youtubeTranscriptRoute from "./routes/youtubeTranscriptRoute.js";
 import scriptWriterRoute from "./routes/script-writer.js";
 import captionMatchRoute from "./routes/captionMatchRoute.js";
+import youtubeRoute from "./routes/youtubeRoute.js";
 
 // Import the new conversion router
 import convertRoute from "./routes/convertRoute.js";
@@ -126,6 +127,7 @@ app.use("/api/video", restrictedCors, restrictOriginMiddleware, videoComposition
 app.use("/api/youtube-transcript", restrictedCors, restrictOriginMiddleware, youtubeTranscriptRoute);
 app.use("/api/script-writer", restrictedCors, restrictOriginMiddleware, scriptWriterRoute);
 app.use("/api/caption-match", restrictedCors, restrictOriginMiddleware, captionMatchRoute);
+app.use("/api/youtube", restrictedCors, restrictOriginMiddleware, youtubeRoute);
 
 
 // app.use("/api/lambda-video-generation", restrictedCors, restrictOriginMiddleware, lambdaVideoGenerationRoute);

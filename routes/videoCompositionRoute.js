@@ -9,6 +9,7 @@ import {
   debugDatabase,
   updateComposition,
   addSegment,
+  updateSegmentCaption,
   verifyCaptionMatching,
   getCompositionById,
   updateCaptionsWithPreciseTiming
@@ -38,6 +39,9 @@ router.post("/add-segment/:id", (req, res) => {
   req.io = req.app.locals.io;
   addSegment(req, res);
 });
+
+// Update individual segment caption
+router.put("/update-segment-caption/:id", updateSegmentCaption);
 
 // Render final video with customizations
 router.post("/render-final/:id", renderFinalVideo);

@@ -1,0 +1,59 @@
+{
+  "compositionId": "38a97381-341e-4bb5-ba42-0a702a48cf75",
+  "timestamp": "2025-09-22T04:03:31.190Z",
+  "debugLogs": [
+    {
+      "timestamp": "2025-09-22T04:02:02.854Z",
+      "step": "render_start",
+      "compositionId": "38a97381-341e-4bb5-ba42-0a702a48cf75",
+      "message": "Starting video rendering for composition 38a97381-341e-4bb5-ba42-0a702a48cf75..."
+    },
+    {
+      "timestamp": "2025-09-22T04:02:02.854Z",
+      "step": "output_path_set",
+      "outputPath": "/var/folders/n5/_b7xtryd7b1fshcw_lw5r4900000gn/T/final-video-38a97381-341e-4bb5-ba42-0a702a48cf75-1758513722854.mp4"
+    },
+    {
+      "timestamp": "2025-09-22T04:02:02.855Z",
+      "step": "bundle_start",
+      "message": "Bundling Remotion composition..."
+    },
+    {
+      "timestamp": "2025-09-22T04:02:02.855Z",
+      "step": "entry_point",
+      "entryPoint": "/Users/ayad/Desktop/vairality/server-vairality/src/index.ts"
+    },
+    {
+      "timestamp": "2025-09-22T04:02:03.317Z",
+      "step": "bundle_complete",
+      "bundleLocation": "/var/folders/n5/_b7xtryd7b1fshcw_lw5r4900000gn/T/remotion-webpack-bundle-OtAEaP"
+    },
+    {
+      "timestamp": "2025-09-22T04:02:03.317Z",
+      "step": "video_calculations",
+      "dimensions": {
+        "width": 1080,
+        "height": 1920
+      },
+      "durationInFrames": 735,
+      "aspect": "9:16",
+      "segmentsCount": 8
+    },
+    {
+      "timestamp": "2025-09-22T04:03:31.178Z",
+      "step": "render_error",
+      "error": "Page crashed!",
+      "stack": "Error: Page crashed!\n    at #onTargetCrashed (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:2873:24)\n    at file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:2790:35\n    at file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:922:9\n    at Array.forEach (<anonymous>)\n    at Object.emit (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:921:38)\n    at CDPSession.emit (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:951:18)\n    at CDPSession._onMessage (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:1172:12)\n    at #onMessage (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:1063:17)\n    at WebSocket.<anonymous> (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:3123:24)\n    at callListener (/Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/node_modules/ws/lib/event-target.js:290:14)\n    at WebSocket.onMessage (/Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/node_modules/ws/lib/event-target.js:209:9)\n    at WebSocket.emit (node:events:518:28)\n    at Receiver.receiverOnMessage (/Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/node_modules/ws/lib/websocket.js:1211:20)\n    at Receiver.emit (node:events:518:28)\n    at Receiver.dataMessage (/Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/node_modules/ws/lib/receiver.js:594:14)\n    at Receiver.getData (/Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/node_modules/ws/lib/receiver.js:496:10)",
+      "message": "Final video render error"
+    }
+  ],
+  "error": {
+    "message": "Page crashed!",
+    "stack": "Error: Page crashed!\n    at #onTargetCrashed (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:2873:24)\n    at file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:2790:35\n    at file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:922:9\n    at Array.forEach (<anonymous>)\n    at Object.emit (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:921:38)\n    at CDPSession.emit (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:951:18)\n    at CDPSession._onMessage (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:1172:12)\n    at #onMessage (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:1063:17)\n    at WebSocket.<anonymous> (file:///Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/dist/esm/index.mjs:3123:24)\n    at callListener (/Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/node_modules/ws/lib/event-target.js:290:14)\n    at WebSocket.onMessage (/Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/node_modules/ws/lib/event-target.js:209:9)\n    at WebSocket.emit (node:events:518:28)\n    at Receiver.receiverOnMessage (/Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/node_modules/ws/lib/websocket.js:1211:20)\n    at Receiver.emit (node:events:518:28)\n    at Receiver.dataMessage (/Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/node_modules/ws/lib/receiver.js:594:14)\n    at Receiver.getData (/Users/ayad/Desktop/vairality/server-vairality/node_modules/@remotion/renderer/node_modules/ws/lib/receiver.js:496:10)",
+    "name": "Error"
+  },
+  "finalResult": {
+    "success": false,
+    "error": "Page crashed!"
+  }
+}

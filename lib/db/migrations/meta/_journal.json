@@ -15,6 +15,13 @@
       "when": 1758417714505,
       "tag": "0001_fluffy_paper_doll",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1758696707411,
+      "tag": "0002_sloppy_thunderbolts",
+      "breakpoints": true
     }
   ]
 }

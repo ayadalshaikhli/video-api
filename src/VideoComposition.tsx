@@ -14,6 +14,7 @@ import {
     getInputProps
 } from 'remotion';
 import { z } from 'zod';
+import TikTokCaption, { TikTokCaptionGroup } from './TikTokCaption';
 
 // Schema for the fixed component - expects flat data structure
 export const videoCompositionFixedSchema = z.object({
@@ -49,7 +50,18 @@ export const videoCompositionFixedSchema = z.object({
     positionFromBottom: z.number().optional(),
     wordsPerBatch: z.number().optional(),
     showEmojis: z.boolean().optional(),
-    musicVolume: z.number().optional()
+    musicVolume: z.number().optional(),
+    
+    // Additional caption styling properties
+    captionHorizontalAlign: z.string().optional(),
+    captionMaxWidthPercent: z.number().optional(),
+    captionPaddingPx: z.number().optional(),
+    captionBorderRadiusPx: z.number().optional(),
+    captionBackgroundColor: z.string().optional(),
+    captionBackgroundOpacity: z.number().optional(),
+    captionBackdropBlurPx: z.number().optional(),
+    captionHorizontalOffsetPx: z.number().optional(),
+    captionBoxShadow: z.string().optional()
 }).passthrough(); // Allow additional properties
 
 // Advanced Caption component with word-by-word highlighting
@@ -144,6 +156,7 @@ const AdvancedCaption = ({ caption, customizations, startFrame, durationFrames }
 
 export const VideoComposition = (props: any) => {
   const [handle] = React.useState(() => delayRender());
+  const frame = useCurrentFrame();
   
   // Try to get input props using getInputProps()
   const inputProps = getInputProps();
@@ -192,32 +205,45 @@ export const VideoComposition = (props: any) => {
   let captions: any[] = [];
   let musicUrl: string = '';
   
-  if (raw.data) {
+  if ((raw as any).data) {
     // Nested structure from frontend
     console.log('📦 Detected nested data structure from frontend');
-    segments = Array.isArray(raw.data.segments) ? raw.data.segments : [];
-    captions = Array.isArray(raw.data.captions) ? raw.data.captions : [];
-    musicUrl = raw.data.musicUrl || '';
+    const data = (raw as any).data;
+    segments = Array.isArray(data.segments) ? data.segments : [];
+    captions = Array.isArray(data.captions) ? data.captions : [];
+    musicUrl = data.musicUrl || '';
   } else {
     // Flat structure from backend
     console.log('📋 Detected flat data structure from backend');
-    segments = Array.isArray(raw.segments) ? raw.segments : [];
-    captions = Array.isArray(raw.captions) ? raw.captions : [];
-    musicUrl = raw.musicUrl || '';
+    segments = Array.isArray((raw as any).segments) ? (raw as any).segments : [];
+    captions = Array.isArray((raw as any).captions) ? (raw as any).captions : [];
+    musicUrl = (raw as any).musicUrl || '';
   }
   
   // Extract customizations
+  const rawAny = raw as any;
   const customizations: any = {
-    fontSize: raw.fontSize || 64,
-    fontWeight: raw.fontWeight || 700,
-    fontFamily: raw.fontFamily || 'Inter',
-    textTransform: raw.textTransform || 'uppercase',
-    activeWordColor: raw.activeWordColor || '#fff',
-    inactiveWordColor: raw.inactiveWordColor || '#00ffea',
-    positionFromBottom: raw.positionFromBottom || 9,
-    wordsPerBatch: raw.wordsPerBatch || 3,
-    showEmojis: raw.showEmojis || true,
-    musicVolume: raw.musicVolume || 8
+    fontSize: rawAny.fontSize || 64,
+    fontWeight: rawAny.fontWeight || 700,
+    fontFamily: rawAny.fontFamily || 'Inter',
+    textTransform: rawAny.textTransform || 'uppercase',
+    activeWordColor: rawAny.activeWordColor || '#4cd6b4',
+    inactiveWordColor: rawAny.inactiveWordColor || '#ffff00',
+    positionFromBottom: rawAny.positionFromBottom || 10,
+    wordsPerBatch: rawAny.wordsPerBatch || 3,
+    showEmojis: rawAny.showEmojis !== false,
+    musicVolume: rawAny.musicVolume || 8,
+    
+    // Additional caption styling properties
+    captionHorizontalAlign: rawAny.captionHorizontalAlign || 'right',
+    captionMaxWidthPercent: rawAny.captionMaxWidthPercent || 80,
+    captionPaddingPx: rawAny.captionPaddingPx || 20,
+    captionBorderRadiusPx: rawAny.captionBorderRadiusPx || 10,
+    captionBackgroundColor: rawAny.captionBackgroundColor || '#000000',
+    captionBackgroundOpacity: rawAny.captionBackgroundOpacity ?? 29,
+    captionBackdropBlurPx: rawAny.captionBackdropBlurPx || 0,
+    captionHorizontalOffsetPx: rawAny.captionHorizontalOffsetPx || 0,
+    captionBoxShadow: rawAny.captionBoxShadow || '0 6px 24px rgba(0,0,0,0.35)'
   };
 
   console.log('🔍 Data extraction:', {
@@ -325,32 +351,42 @@ export const VideoComposition = (props: any) => {
         );
       })}
 
-      {/* Render captions with advanced styling */}
-      {captions.map((caption: any, index: number) => {
-        const startTime = caption.startMs ? caption.startMs / 1000 : 0;
-        const endTime = caption.endMs ? caption.endMs / 1000 : startTime + 3;
-        const duration = endTime - startTime;
-        
-        const startFrame = Math.round(startTime * 30);
-        const durationFrames = Math.round(duration * 30);
+      {/* Render captions using TikTok-style presentation */}
+      {captions && captions.length > 0 ? (
+        <TikTokCaptionGroup
+          wordCaptions={captions}
+          currentFrame={frame}
+          fps={30}
+          customizations={customizations}
+        />
+      ) : (
+        // Fallback to individual caption rendering if needed
+        captions?.map((caption: any, index: number) => {
+          const startTime = caption.startMs ? caption.startMs / 1000 : 0;
+          const endTime = caption.endMs ? caption.endMs / 1000 : startTime + 3;
+          const duration = endTime - startTime;
+          
+          const startFrame = Math.round(startTime * 30);
+          const durationFrames = Math.round(duration * 30);
 
-        console.log(`📝 Rendering caption ${index + 1}/${captions.length}: "${caption.text}" from ${startFrame} to ${startFrame + durationFrames} frames`);
+          console.log(`📝 Rendering caption ${index + 1}/${captions.length}: "${caption.text}" from ${startFrame} to ${startFrame + durationFrames} frames`);
 
-        return (
-          <Sequence
-            key={`caption-${index}`}
-            from={startFrame}
-            durationInFrames={durationFrames}
-          >
-            <AdvancedCaption 
-              caption={caption}
-              customizations={customizations}
-              startFrame={startFrame}
-              durationFrames={durationFrames}
-            />
-          </Sequence>
-        );
-      })}
+          return (
+            <Sequence
+              key={`caption-${index}`}
+              from={startFrame}
+              durationInFrames={durationFrames}
+            >
+              <TikTokCaption 
+                caption={caption}
+                currentFrame={frame}
+                fps={30}
+                customizations={customizations}
+              />
+            </Sequence>
+          );
+        })
+      )}
 
       {/* Add background music if available */}
       {musicUrl && (

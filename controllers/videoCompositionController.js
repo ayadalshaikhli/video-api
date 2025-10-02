@@ -1248,6 +1248,130 @@ export const updateCaptionsWithPreciseTiming = async (req, res) => {
     }
 };
 
+// Update individual segment caption
+export const updateSegmentCaption = async (req, res) => {
+    try {
+        const user = await getUserFromSession(req);
+        if (!user) {
+            return res.status(401).json({ 
+                error: 'Not authenticated' 
+            });
+        }
+
+        const { id } = req.params;
+        const { segmentId, caption } = req.body;
+
+        console.log('[Update Segment Caption] Starting for composition:', id);
+        console.log('[Update Segment Caption] Segment data:', { segmentId, caption });
+
+        // Validate required fields
+        if (!caption || caption.trim() === '') {
+            return res.status(400).json({ 
+                error: 'Caption text is required' 
+            });
+        }
+
+        if (!segmentId) {
+            return res.status(400).json({ 
+                error: 'Segment ID is required' 
+            });
+        }
+
+        // Get current composition
+        const composition = await db.select().from(compositions).where(eq(compositions.id, id)).execute();
+        if (!composition.length) {
+            return res.status(404).json({ 
+                error: 'Composition not found' 
+            });
+        }
+
+        const currentComposition = composition[0];
+
+        // Find the segment in the segments table
+        const segmentResult = await db.select().from(segments).where(eq(segments.id, segmentId)).execute();
+        if (!segmentResult.length) {
+            return res.status(404).json({ 
+                error: 'Segment not found' 
+            });
+        }
+
+        const segmentToUpdate = segmentResult[0];
+        console.log('[Update Segment Caption] Found segment to update:', segmentToUpdate);
+
+        // Generate new audio for the updated caption
+        let audioFileName = null;
+        let actualAudioDuration = parseFloat(segmentToUpdate.end) - parseFloat(segmentToUpdate.start);
+
+        try {
+            console.log('[Update Segment Caption] Generating new audio for caption:', caption);
+            
+            // Import TTS function
+            const { generateTTS } = await import('../actions/cloudflare-tts.js');
+            
+            // Generate audio with the new caption
+            const audioResult = await generateTTS(caption, {
+                voice: currentComposition.voice || 'aura-asteria-en',
+                speed: 1.0,
+                stability: 0.5,
+                clarity: 0.75
+            });
+
+            if (audioResult && audioResult.audioUrl) {
+                // Download and save the audio file
+                const audioResponse = await fetch(audioResult.audioUrl);
+                const audioBuffer = await audioResponse.arrayBuffer();
+                
+                // Get actual audio duration using ffprobe
+                const { getAudioDuration } = await import('../utils/ffprobe.js');
+                actualAudioDuration = await getAudioDuration(Buffer.from(audioBuffer));
+                
+                // Save audio file
+                audioFileName = `segment_${segmentId}_${Date.now()}.mp3`;
+                const audioPath = join(tmpdir(), audioFileName);
+                fs.writeFileSync(audioPath, Buffer.from(audioBuffer));
+                
+                console.log('[Update Segment Caption] Audio generated and saved:', {
+                    fileName: audioFileName,
+                    duration: actualAudioDuration
+                });
+            }
+        } catch (error) {
+            console.error('[Update Segment Caption] Audio generation error:', error.message);
+            // Continue without new audio - keep existing audio
+        }
+
+        // Update the segment in the database
+        const [updatedSegment] = await db.update(segments)
+            .set({
+                text: caption.trim(),
+                end: parseFloat(segmentToUpdate.start) + actualAudioDuration, // Update end time based on new audio duration
+                mediaUrl: audioFileName || segmentToUpdate.mediaUrl, // Keep existing audio if new generation failed
+                updatedAt: new Date()
+            })
+            .where(eq(segments.id, segmentId))
+            .returning();
+
+        console.log('[Update Segment Caption] Segment updated successfully:', updatedSegment);
+
+        // Get the updated composition with all segments
+        const updatedComposition = await getCompositionById(id);
+
+        res.json({
+            success: true,
+            segment: updatedSegment,
+            composition: updatedComposition,
+            message: 'Segment caption updated successfully'
+        });
+
+    } catch (error) {
+        console.error('[Update Segment Caption] Error:', error);
+        res.status(500).json({ 
+            error: 'Failed to update segment caption',
+            details: error.message 
+        });
+    }
+};
+
 export const addSegment = async (req, res) => {
     try {
         const user = await getUserFromSession(req);
@@ -1774,7 +1898,16 @@ export const renderFinalVideo = async (req, res) => {
             backgroundMusic,
             musicVolume,
             customMusicFile,
-            youtubeUrl
+            youtubeUrl,
+            captionHorizontalAlign,
+            captionMaxWidthPercent,
+            captionPaddingPx,
+            captionBorderRadiusPx,
+            captionBackgroundColor,
+            captionBackgroundOpacity,
+            captionBackdropBlurPx,
+            captionHorizontalOffsetPx,
+            captionBoxShadow
         } = req.body;
 
         console.log('Rendering final video with customizations:', {
@@ -1838,7 +1971,16 @@ export const renderFinalVideo = async (req, res) => {
                 backgroundMusic,
                 musicVolume,
                 customMusicFile,
-                youtubeUrl
+                youtubeUrl,
+                captionHorizontalAlign,
+                captionMaxWidthPercent,
+                captionPaddingPx,
+                captionBorderRadiusPx,
+                captionBackgroundColor,
+                captionBackgroundOpacity,
+                captionBackdropBlurPx,
+                captionHorizontalOffsetPx,
+                captionBoxShadow
             },
             status: 'rendering'
         };
@@ -2095,7 +2237,16 @@ export const renderFinalVideo = async (req, res) => {
                     positionFromBottom,
                     wordsPerBatch,
                     showEmojis,
-                    musicVolume
+                    musicVolume,
+                    captionHorizontalAlign,
+                    captionMaxWidthPercent,
+                    captionPaddingPx,
+                    captionBorderRadiusPx,
+                    captionBackgroundColor,
+                    captionBackgroundOpacity,
+                    captionBackdropBlurPx,
+                    captionHorizontalOffsetPx,
+                    captionBoxShadow
                 };
                 
                 console.log('🎬 Final inputProps being passed to renderMedia:', {
